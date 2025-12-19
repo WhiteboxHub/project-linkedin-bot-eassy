@@ -29,7 +29,7 @@ ENV/
 # Credentials and Personal Configs
 "secrets.py"
 "config/personals.py"
-"config/candidates/*.yaml"
+# "config/candidates/*.yaml"  # Commented out so candidate profiles are tracked
 apikeys.py
 *.pdf
 *.csv
