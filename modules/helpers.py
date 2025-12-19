@@ -1,16 +1,4 @@
-'''
-Author:     Sai Vignesh Golla
-LinkedIn:   https://www.linkedin.com/in/saivigneshgolla/
 
-Copyright (C) 2024 Sai Vignesh Golla
-
-License:    GNU Affero General Public License
-            https://www.gnu.org/licenses/agpl-3.0.en.html
-            
-GitHub:     https://github.com/GodsScion/Auto_job_applier_linkedIn
-
-version:    24.12.29.12.30
-'''
 
 
 # Imports
@@ -26,14 +14,16 @@ from datetime import datetime, timedelta
 from pyautogui import alert
 from pprint import pprint
 
-from config.settings import logs_folder_path
+# from config.loader import cfg
+# logs_folder_path = cfg["settings"]["logs_folder_path"]
 
+from config.loader import load_candidate
+cfg = load_candidate()
+logs_folder_path = cfg["settings"]["logs_folder_path"]
 
-
-#### Common functions ####
 
 #< Directories related
-def make_directories(paths: list[str]) -> None:
+def make_directories(paths: list[str]) ->  None:
     '''
     Function to create missing directories
     '''
@@ -129,7 +119,8 @@ def print_lg(*msgs: str | dict, end: str = "\n", pretty: bool = False, flush: bo
                 file.write(str(message) + end)
     except Exception as e:
         trail = f'Skipped saving this message: "{message}" to log.txt!' if from_critical else "We'll try one more time to log..."
-        alert(f"log.txt in {logs_folder_path} is open or is occupied by another program! Please close it! {trail}", "Failed Logging")
+        # Bot will not show alert pop-ups
+        print(f"⚠️ Warning: log.txt is occupied. {trail}")
         if not from_critical:
             critical_error_log("Log.txt is open or is occupied by another program!", e)
 #>
@@ -168,7 +159,9 @@ def manual_login_retry(is_logged_in: callable, limit: int = 2) -> None:
             button = "Skip Confirmation"
             message = 'If you\'re seeing this message even after you logged in, Click "{}". Seems like auto login confirmation failed!'.format(button)
         count += 1
-        if alert(message, "Login Required", button) and count > limit: return
+        print_lg(f"Waiting for manual login... (Attempt {count})")
+        # if alert(message, "Login Required", button) and count > limit: return
+        sleep(10) # Give some time if not using pop-up
 
 
 

@@ -8,7 +8,7 @@ app = Flask(__name__)
 CORS(app)
 
 PATH = 'all excels/'
-##> ------ Karthik Sarode : karthik.sarode23@gmail.com - UI for excel files ------
+
 @app.route('/')
 def home():
     """Displays the home page of the application."""
@@ -95,4 +95,5 @@ def update_applied_date(job_id):
 if __name__ == '__main__':
     app.run(debug=True)
 
-##<
+
+

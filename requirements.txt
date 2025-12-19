@@ -1,0 +1,25 @@
+# LinkedIn Auto Job Applier - Minimal Requirements
+# Install with: pip install -r requirements.txt
+
+# Web Scraping & Browser Automation
+selenium==4.23.1
+undetected-chromedriver>=3.5.5
+webdriver-manager>=4.0.0
+
+# UI Automation
+PyAutoGUI>=0.9.54
+
+# Web Framework (Dashboard)
+Flask>=3.0.0
+flask-cors>=4.0.0
+
+# AI/LLM Integration
+openai>=1.0.0
+google-generativeai>=0.5.0
+
+# Utilities
+PyYAML>=6.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+colorama>=0.4.6
+tqdm>=4.66.0

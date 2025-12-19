@@ -1,13 +1,42 @@
-__pycache__
-.vscode
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 
-all excels
-all resumes
-logs
+# IDEs
+.vscode/
+.idea/
+.project
+.pydevproject
+.settings/
 
-old
+# Bot data and History
+"all excels/"
+"all resumes/"
+"logs/"
+"output/"
+"generated/"
+"bot_profile/"
+counts.json
 
-secrets.py
-config/personals.py
-.venv
+# Environment and Virtual Envs
+venv/
+.venv/
+env/
+ENV/
+.env
+
+# Credentials and Personal Configs
+"secrets.py"
+"config/personals.py"
+"config/candidates/*.yaml"
 apikeys.py
+*.pdf
+*.csv
+*.xlsx
+
+# Other
+old/
+temp/
+tmp/
+*.log
