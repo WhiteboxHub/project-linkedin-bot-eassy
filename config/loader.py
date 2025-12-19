@@ -1,3 +1,441 @@
+# # # # import os
+# # # # import yaml
+# # # # import pyautogui
+
+# # # # CONFIG_DIR = os.path.join("config", "candidates")
+
+
+# # # # def list_candidates():
+# # # #     """Return all YAML candidate files."""
+# # # #     if not os.path.exists(CONFIG_DIR):
+# # # #         os.makedirs(CONFIG_DIR)
+
+# # # #     return [f for f in os.listdir(CONFIG_DIR) if f.endswith(".yaml")]
+
+
+# # # # def choose_candidate():
+# # # #     """Ask user to choose a candidate profile."""
+# # # #     candidates = list_candidates()
+
+# # # #     if len(candidates) == 0:
+# # # #         pyautogui.alert(
+# # # #             "No candidate YAML files found in config/candidates/\n\n"
+# # # #             "Create at least one yaml file first!",
+# # # #             "Missing Candidate Files"
+# # # #         )
+# # # #         raise Exception("No YAML files found")
+
+# # # #     if len(candidates) == 1:
+# # # #         # Only one candidate → auto-select
+# # # #         return candidates[0]
+
+# # # #     # Show selection dialog
+# # # #     choice_name = pyautogui.confirm(
+# # # #         "Select candidate profile to run the bot:",
+# # # #         "Choose Candidate",
+# # # #         candidates
+# # # #     )
+
+# # # #     if not choice_name:
+# # # #         raise Exception("Candidate selection cancelled!")
+
+# # # #     return choice_name
+
+
+# # # # def load_yaml(path):
+# # # #     """Load YAML and return dict."""
+# # # #     with open(path, "r", encoding="utf-8") as f:
+# # # #         return yaml.safe_load(f)
+
+
+# # # # def load_candidate():
+# # # #     """
+# # # #     Loads the chosen candidate YAML 
+# # # #     and returns it as cfg dictionary.
+# # # #     """
+# # # #     candidate_file = choose_candidate()
+
+# # # #     full_path = os.path.join(CONFIG_DIR, candidate_file)
+
+# # # #     cfg = load_yaml(full_path)
+
+# # # #     print(f"\nLoaded Candidate Profile: {candidate_file}\n")
+
+# # # #     return cfg
+
+
+
+# # # import os
+# # # import yaml
+# # # import pyautogui
+# # # import inspect
+
+
+# # # CONFIG_DIR = os.path.join("config", "candidates")
+
+
+# # # # ------------------------------------------------
+# # # #  MAKE cfg AVAILABLE FOR IMPORT (IMPORTANT FIX)
+# # # # ------------------------------------------------
+
+
+# # # def flatten_dict(data, parent_key=""):
+# # #     """Flatten nested dicts into search_location, questions_pause_before_submit, etc."""
+# # #     items = {}
+# # #     for k, v in data.items():
+# # #         new_key = f"{parent_key}_{k}" if parent_key else k
+# # #         if isinstance(v, dict):
+# # #             items.update(flatten_dict(v, new_key))
+# # #         else:
+# # #             items[new_key] = v
+# # #     return items
+
+
+# # # # def create_globals(flat_cfg):
+# # # #     """Expose YAML keys as global variables in runAiBot.py"""
+# # # #     mapped = {}
+
+# # # #     for long_key, value in flat_cfg.items():
+# # # #         mapped[long_key] = value  # Example: search_location, search_job_type
+
+# # # #         # ALSO create short version
+# # # #         short_key = long_key.split("_")[-1]
+# # # #         mapped[short_key] = value  # Example: location, job_type, industry, job_titles
+
+# # # #     return mapped
+# # # def create_globals(flat_cfg):
+# # #     """
+# # #     Create BOTH long and short variable names.
+# # #     Example:
+# # #         personals_first_name → first_name
+# # #         experience_current_ctc → current_ctc
+# # #         search_job_type → job_type
+# # #     """
+# # #     mapped = {}
+
+# # #     for long_key, value in flat_cfg.items():
+# # #         # 1️⃣ Full variable name
+# # #         mapped[long_key] = value
+
+# # #         # 2️⃣ Short variable name (everything after the FIRST underscore)
+# # #         parts = long_key.split("_", 1)
+# # #         if len(parts) == 2:
+# # #             short_key = parts[1]     # example: "first_name"
+# # #             mapped[short_key] = value
+# # #         else:
+# # #             mapped[long_key] = value  # safety fallback
+
+# # #     return mapped
+
+
+# # # def load_yaml(path):
+# # #     with open(path, "r", encoding="utf-8") as f:
+# # #         return yaml.safe_load(f)
+
+
+# # # def list_candidates():
+# # #     files = [f for f in os.listdir(CONFIG_DIR) if f.endswith(".yaml")]
+# # #     return files
+
+
+# # # def choose_candidate():
+# # #     cand_files = list_candidates()
+
+# # #     if not cand_files:
+# # #         raise Exception("No YAML files found in config/candidates/")
+
+# # #     if len(cand_files) == 1:
+# # #         return cand_files[0]
+
+# # #     selected = pyautogui.confirm("Choose Candidate", "Candidate Selection", cand_files)
+# # #     return selected
+
+
+# # # # def load_candidate():
+# # # #     """Load YAML, flatten it, inject globals into runAiBot.py"""
+# # # #     file = choose_candidate()
+# # # #     full_path = os.path.join(CONFIG_DIR, file)
+
+# # # #     cfg = load_yaml(full_path)
+
+# # # #     # Flatten YAML
+# # # #     flat_cfg = flatten_dict(cfg)
+
+# # # #     # Map to variables for runAiBot.py
+# # # #     mapped = create_globals(flat_cfg)
+
+# # # #     # Inject into caller's global namespace
+# # # #     caller = inspect.stack()[1].frame.f_globals
+# # # #     caller.update(mapped)
+
+# # # #     print(f"\nLoaded config: {file}\n")
+
+# # # #     return cfg
+
+
+# # # def load_candidate():
+# # #     file = choose_candidate()
+# # #     full_path = os.path.join(CONFIG_DIR, file)
+
+# # #     cfg = load_yaml(full_path)
+
+# # #     flat_cfg = flatten_dict(cfg)
+# # #     mapped = create_globals(flat_cfg)
+
+# # #     caller = inspect.stack()[1].frame.f_globals
+# # #     caller.update(mapped)
+
+# # #     print(f"\nLoaded config: {file}\n")
+
+# # #     return cfg
+
+# # # cfg = load_candidate()
+
+
+# # # import os
+# # # import yaml
+# # # import pyautogui
+# # # import inspect
+
+# # # CONFIG_DIR = os.path.join("config", "candidates")
+
+# # # def flatten_dict(data, parent_key=""):
+# # #     items = {}
+# # #     for k, v in data.items():
+# # #         new_key = f"{parent_key}_{k}" if parent_key else k
+# # #         if isinstance(v, dict):
+# # #             items.update(flatten_dict(v, new_key))
+# # #         else:
+# # #             items[new_key] = v
+# # #     return items
+
+# # # def create_globals(flat_cfg):
+# # #     """
+# # #     Create BOTH long and short variable names.
+# # #     Example:
+# # #         personals_first_name → first_name
+# # #         personals_middle_name → middle_name
+# # #         personals_last_name → last_name
+# # #     """
+# # #     mapped = {}
+
+# # #     for long_key, value in flat_cfg.items():
+# # #         mapped[long_key] = value
+
+# # #         # Short name = everything after the FIRST underscore
+# # #         if "_" in long_key:
+# # #             short_key = long_key.split("_", 1)[1]
+# # #             mapped[short_key] = value
+
+# # #     return mapped
+
+# # # def load_yaml(path):
+# # #     with open(path, "r", encoding="utf-8") as f:
+# # #         return yaml.safe_load(f)
+
+# # # def list_candidates():
+# # #     return [f for f in os.listdir(CONFIG_DIR) if f.endswith(".yaml")]
+
+# # # def choose_candidate():
+# # #     files = list_candidates()
+# # #     if len(files) == 1:
+# # #         return files[0]
+# # #     return pyautogui.confirm("Choose Candidate", "Candidate Selection", files)
+
+# # # def load_candidate():
+# # #     file = choose_candidate()
+# # #     full_path = os.path.join(CONFIG_DIR, file)
+# # #     cfg = load_yaml(full_path)
+# # #     flat_cfg = flatten_dict(cfg)
+# # #     mapped = create_globals(flat_cfg)
+
+# # #     caller = inspect.stack()[1].frame.f_globals
+# # #     caller.update(mapped)
+
+# # #     print(f"\nLoaded config: {file}\n")
+# # #     return cfg
+
+
+
+# # import os
+# # import yaml
+# # import pyautogui
+# # import inspect
+
+# # CONFIG_DIR = os.path.join("config", "candidates")
+
+# # # -------------------------------------
+# # # 1️⃣ FLATTEN YAML: personals_first_name
+# # # -------------------------------------
+# # def flatten_dict(data, parent_key=""):
+# #     items = {}
+# #     for k, v in data.items():
+# #         new_key = f"{parent_key}_{k}" if parent_key else k
+# #         if isinstance(v, dict):
+# #             items.update(flatten_dict(v, new_key))
+# #         else:
+# #             items[new_key] = v
+# #     return items
+
+
+# # # -------------------------------------------------------
+# # # 2️⃣ MAPPING RULE (VERY IMPORTANT FIX — USE THIS EXACTLY)
+# # # -------------------------------------------------------
+# # def create_globals(flat_cfg):
+# #     """
+# #     Convert long keys into short usable variables.
+# #     Example:
+# #         personals_first_name → first_name
+# #         experience_years_of_experience → years_of_experience
+# #         settings_click_gap → click_gap
+# #     """
+
+# #     mapped = {}
+
+# #     for long_key, value in flat_cfg.items():
+
+# #         # Store full key
+# #         mapped[long_key] = value
+
+# #         # Split ONLY ON FIRST "_"
+# #         parts = long_key.split("_", 1)
+
+# #         if len(parts) == 2:
+# #             short_key = parts[1]  # example: "first_name"
+# #             mapped[short_key] = value
+
+# #     return mapped
+
+
+# # # ------------------------------
+# # # 3️⃣ LOAD YAML
+# # # ------------------------------
+# # def load_yaml(path):
+# #     with open(path, "r", encoding="utf-8") as f:
+# #         return yaml.safe_load(f)
+
+
+# # def list_candidates():
+# #     return [f for f in os.listdir(CONFIG_DIR) if f.endswith(".yaml")]
+
+
+# # def choose_candidate():
+# #     files = list_candidates()
+
+# #     if not files:
+# #         raise Exception("No YAML files found inside config/candidates/")
+
+# #     if len(files) == 1:
+# #         return files[0]
+
+# #     return pyautogui.confirm("Choose Candidate", "Candidate Selection", files)
+
+
+# # # ---------------------------------------------------------
+# # # 4️⃣ LOAD CANDIDATE + INJECT GLOBAL VARIABLES INTO CALLER
+# # # ---------------------------------------------------------
+# # def load_candidate():
+# #     file = choose_candidate()
+# #     full_path = os.path.join(CONFIG_DIR, file)
+
+# #     cfg = load_yaml(full_path)
+
+# #     flat_cfg = flatten_dict(cfg)
+# #     mapped = create_globals(flat_cfg)
+
+# #     # Inject into caller's global variable space
+# #     caller = inspect.stack()[1].frame.f_globals
+# #     caller.update(mapped)
+
+# #     print(f"\nLoaded config: {file}\n")
+
+# #     # DEBUG: Show ALL mapped variables
+# #     print("=== Injected Mapped Variables ===")
+# #     for k, v in mapped.items():
+# #         print(f"{k} = {v}")
+# #     print("=================================\n")
+
+# #     return cfg
+
+
+# # # Load config on import
+# # cfg = load_candidate()
+
+
+# import os
+# import yaml
+# import inspect
+# from config.settings import *
+
+# CONFIG_DIR = os.path.join("config", "candidates")
+
+# def flatten_dict(data, parent_key=""):
+#     items = {}
+#     for k, v in data.items():
+#         new_key = f"{parent_key}_{k}" if parent_key else k
+#         if isinstance(v, dict):
+#             items.update(flatten_dict(v, new_key))
+#         else:
+#             items[new_key] = v
+#     return items
+
+# def create_globals(flat_cfg):
+#     mapped = {}
+#     for long_key, value in flat_cfg.items():
+#         mapped[long_key] = value
+#         parts = long_key.split("_", 1)
+#         if len(parts) == 2:
+#             short_key = parts[1]
+#             mapped[short_key] = value
+#     return mapped
+
+# def load_yaml(path):
+#     with open(path, "r", encoding="utf-8") as f:
+#         return yaml.safe_load(f)
+
+# def list_candidates():
+#     return [f for f in os.listdir(CONFIG_DIR) if f.endswith(".yaml")]
+
+# def choose_candidate():
+#     files = list_candidates()
+#     if not files:
+#         raise Exception("No YAML files found inside config/candidates/")
+#     if len(files) == 1:
+#         return files[0]
+#     return pyautogui.confirm("Choose Candidate", "Candidate Selection", files)
+
+# def load_all_config():
+#     # Load YAML configuration
+#     file = choose_candidate()
+#     full_path = os.path.join(CONFIG_DIR, file)
+#     yaml_cfg = load_yaml(full_path)
+#     flat_cfg = flatten_dict(yaml_cfg)
+#     mapped = create_globals(flat_cfg)
+    
+#     # Load settings.py configuration
+#     settings_vars = {}
+#     for name in dir():
+#         if not name.startswith("__") and not callable(globals()[name]):
+#             settings_vars[name] = globals()[name]
+    
+#     # Merge configurations (settings.py takes precedence)
+#     merged_cfg = {**mapped, **settings_vars}
+    
+#     # Inject into caller's global variable space
+#     caller = inspect.stack()[1].frame.f_globals
+#     caller.update(merged_cfg)
+    
+#     print(f"\nLoaded config: {file}\n")
+#     print("=== Injected Merged Variables ===")
+#     for k, v in merged_cfg.items():
+#         print(f"{k} = {v}")
+#     print("=================================\n")
+    
+#     return yaml_cfg
+
+
+
+
 import os
 import yaml
 import pyautogui

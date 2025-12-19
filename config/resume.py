@@ -1,84 +1,178 @@
-'''
-Author:     Sai Vignesh Golla
-LinkedIn:   https://www.linkedin.com/in/saivigneshgolla/
 
-Copyright (C) 2024 Sai Vignesh Golla
+# # from personals import *
+# # import json
 
-License:    GNU Affero General Public License
-            https://www.gnu.org/licenses/agpl-3.0.en.html
-            
-GitHub:     https://github.com/GodsScion/Auto_job_applier_linkedIn
 
-version:    24.12.29.12.30
-'''
+# # ###################################################### CONFIGURE YOUR RESUME HERE ######################################################
 
-from personals import *
+# # # Default resume path for uploads  
+# # # Your resume file:
+# # default_resume_path = "modules/resumes/swarnalatha_resume.pdf"      # Your resume stored in the same folder
+
+
+# # '''
+# # YOU DON'T HAVE TO EDIT THIS FILE, IF YOU ADDED YOUR DEFAULT RESUME.
+# # This file will auto-generate fields required for headline, name, and user identity.
+# # '''
+
+# # # Auto-generate your resume headline JSON (used internally by tool)
+# # resume_headline = {
+# #     "first_name": first_name,         # From personals.py
+# #     "middle_name": middle_name,       # From personals.py
+# #     "last_name": last_name,           # From personals.py
+# #     "phone": phone_number,
+# #     "location": current_city if current_city else "Frisco, Texas, USA",
+# #     "headline": linkedin_headline,
+# #     "linkedin": linkedIn,
+# #     "skills": [
+# #         "Python", "AI/ML Engineering", "Data Science", "NLP", "LangChain", 
+# #         "Generative AI", "AWS", "Large Language Models (LLMs)", "RAG Pipelines"
+# #     ]
+# # }
+
+# # resume_headline_json = json.dumps(resume_headline, indent=4)
+
+
+
+
+# from personals import *
+# import json
+
+
+# ###################################################### CONFIGURE YOUR RESUME HERE ######################################################
+
+# # Default resume path for uploads  
+# # Your resume file:
+# # default_resume_path = "modules/resumes/vijayalakshmi_resume.pdf"      # Your resume stored in the same folder
+# default_resume_path = "modules/resumes/sujatha_akkala.pdf" 
+
+# '''
+# YOU DON'T HAVE TO EDIT THIS FILE, IF YOU ADDED YOUR DEFAULT RESUME.
+# This file will auto-generate fields required for headline, name, and user identity.
+# '''
+
+# # Auto-generate your resume headline JSON (used internally by tool)
+# resume_headline = {
+#     "first_name": first_name,               # From personals.py
+#     "middle_name": middle_name,             # From personals.py
+#     "last_name": last_name,                 # From personals.py
+#     "phone": phone_number,
+#     "location": current_city if current_city else "Mountain House, CA, USA",
+#     "headline": linkedin_headline,
+#     "linkedin": linkedIn,
+#     "skills": [
+#         "Python", 
+#         "Machine Learning", 
+#         "AI/ML Engineering", 
+#         "Generative AI", 
+#         "LangGraph",
+#         "LangChain", 
+#         "LLMs", 
+#         "RAG Pipelines",
+#         "NLP",
+#         "Vector Databases (Milvus, Chroma)",
+#         "AWS Bedrock",
+#         "AWS Sagemaker",
+#         "FastAPI",
+#         "MLOps",
+#         "Docker", 
+#         "Kubernetes"
+#     ]
+# }
+
+# # Convert to JSON string for other modules if needed
+# resume_headline_json = json.dumps(resume_headline, indent=4)
+
+
+
+
+
+from yaml import *
 import json
+
 
 ###################################################### CONFIGURE YOUR RESUME HERE ######################################################
 
-
-# # Give an relative path of your default resume to be uploaded. If file in not found, will continue using your previously uploaded resume in LinkedIn.
-# default_resume_path = "all resumes/default/resume.pdf"      # (In Development)
-
-'''
-YOU DON'T HAVE TO EDIT THIS FILE, IF YOU ADDED YOUR DEFAULT RESUME.
-'''
+# Default resume path for uploads  
+# Your resume file:
+default_resume_path = "modules/resumes/sunil_resume.pdf"      # Your resume stored in the same folder
 
 
-# resume_headline = json({
-#     "first_name": first_name,
-# })
-
-
-
-
-
-
-
-
-
-
-
-# # >>>>>>>>>>> RELATED SETTINGS <<<<<<<<<<<
-
-# ## Allow Manual Inputs
-# # Should the tool pause before every submit application during easy apply to let you check the information?
-# pause_before_submit = True         # True or False, Note: True or False are case-sensitive
 # '''
-# Note: Will be treated as False if `run_in_background = True`
+# YOU DON'T HAVE TO EDIT THIS FILE, IF YOU ADDED YOUR DEFAULT RESUME.
+# This file will auto-generate fields required for headline, name, and user identity.
 # '''
 
-# # Should the tool pause if it needs help in answering questions during easy apply?
-# # Note: If set as False will answer randomly...
-# pause_at_failed_question = True    # True or False, Note: True or False are case-sensitive
+# # Auto-generate your resume headline JSON (used internally by tool)
+# resume_headline = {
+#     "first_name": first_name,         # From personals.py
+#     "middle_name": middle_name,       # From personals.py
+#     "last_name": last_name,           # From personals.py
+#     "phone": phone_number,
+#     "location": current_city if current_city else "Tirupati, Andhra Pradesh, India",
+#     "headline": linkedin_headline,
+#     "linkedin": linkedIn,
+#     "skills": [
+#         "Python", "Machine Learning", "Data Analysis", "NumPy", "Pandas",
+#         "Cybersecurity", "Threat Detection"
+#     ]
+# }
+
+# # Convert to JSON string for other modules if needed
+# resume_headline_json = json.dumps(resume_headline, indent=4)
+
+
+
+# ############################################################################################################
 # '''
-# Note: Will be treated as False if `run_in_background = True`
+# THANK YOU for using this tool 😊! Wishing you the best in your job hunt 🙌🏻!
+
+# Sharing is caring! If you found this tool helpful, please share it with your peers 🥺. 
+# Your support keeps this project alive.
+
+# Gratefully yours 🙏🏻,
+# Sunil Poli
 # '''
-# ##
-
-# # Do you want to overwrite previous answers?
-# overwrite_previous_answers = False # True or False, Note: True or False are case-sensitive
+# ############################################################################################################
 
 
 
+import json
+
+# Delay evaluation – this function builds the resume headline AFTER variables exist
+def build_resume_headline():
+    # Use globals dynamically after YAML mapping is loaded
+    data = {
+        "first_name": globals().get("first_name", ""),
+        "middle_name": globals().get("middle_name", ""),
+        "last_name": globals().get("last_name", ""),
+        "phone": globals().get("phone_number", ""),
+
+        "location": globals().get("current_city", "") or "Tirupati, Andhra Pradesh, India",
+        "headline": globals().get("linkedin_headline", ""),
+        "linkedin": globals().get("linkedIn", ""),
+
+        "skills": [
+            "Python", "Machine Learning", "Data Analysis",
+            "NumPy", "Pandas", "Cybersecurity", "Threat Detection"
+        ]
+    }
+
+    # Return both object and JSON string
+    return data, json.dumps(data, indent=4)
 
 
-
+# Build only when called (AFTER load_candidate())
+resume_headline, resume_headline_json = build_resume_headline()
 
 ############################################################################################################
 '''
-THANK YOU for using my tool 😊! Wishing you the best in your job hunt 🙌🏻!
+THANK YOU for using this tool 😊! Wishing you the best in your job hunt 🙌🏻!
 
-Sharing is caring! If you found this tool helpful, please share it with your peers 🥺. Your support keeps this project alive.
-
-Support my work on <PATREON_LINK>. Together, we can help more job seekers.
-
-As an independent developer, I pour my heart and soul into creating tools like this, driven by the genuine desire to make a positive impact.
-
-Your support, whether through donations big or small or simply spreading the word, means the world to me and helps keep this project alive and thriving.
+Sharing is caring! If you found this tool helpful, please share it with your peers 🥺. 
+Your support keeps this project alive.
 
 Gratefully yours 🙏🏻,
-Sai Vignesh Golla
+Sunil Poli
 '''
 ############################################################################################################

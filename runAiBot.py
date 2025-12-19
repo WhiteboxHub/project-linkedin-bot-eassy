@@ -48,7 +48,7 @@ try:
     # Extract all variables from config
     globals().update(extract_variables(cfg))
 except Exception as e:
-    print(f"❌ Failed to load configuration: {e}")
+    pyautogui.alert(f"Failed to load configuration: {e}", "Configuration Error")
     raise e
 
 if run_in_background == True:
@@ -510,9 +510,9 @@ notice_period_weeks = str(notice_period//7)
 notice_period = str(notice_period)
 
 aiClient = None
-
+##> ------ Dheeraj Deshwal : dheeraj9811 Email:dheeraj20194@iiitd.ac.in/dheerajdeshwal9811@gmail.com - Feature ------
 about_company_for_ai = None # TODO extract about company for AI
-
+##<
 
 #>
 
@@ -792,9 +792,9 @@ def get_job_description(
     - `skipMessage: str | None`
     '''
     try:
-
+        ##> ------ Dheeraj Deshwal : dheeraj9811 Email:dheeraj20194@iiitd.ac.in/dheerajdeshwal9811@gmail.com - Feature ------
         jobDescription = "Unknown"
-
+        ##<
         experience_required = "Unknown"
         found_masters = 0
         jobDescription = find_by_class(driver, "jobs-box__html-content").text
@@ -875,7 +875,7 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                 options = "".join([f' "{option}",' for option in optionsText])
             prev_answer = selected_option
             if overwrite_previous_answers or selected_option == "Select an option":
-
+                ##> ------ WINDY_WINDWARD Email:karthik.sarode23@gmail.com - Added fuzzy logic to answer location based questions ------
                 if 'email' in label or 'phone' in label: 
                     answer = prev_answer
                 elif 'gender' in label or 'sex' in label: 
@@ -915,7 +915,7 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                         possible_answer_phrases.append(answer.upper())
                         # Try without special characters
                         possible_answer_phrases.append(''.join(c for c in answer if c.isalnum()))
-
+                    ##<
                     foundOption = False
                     for phrase in possible_answer_phrases:
                         for option in optionsText:
@@ -1048,7 +1048,7 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                 if 'summary' in label: answer = linkedin_summary
                 elif 'cover' in label: answer = cover_letter
                 if answer == "":
-
+                ##> ------ Yang Li : MARKYangL - Feature ------
                     if use_AI and aiClient:
                         try:
                             if ai_provider.lower() == "openai":
@@ -1078,7 +1078,7 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                     actions.send_keys(Keys.ARROW_DOWN)
                     actions.send_keys(Keys.ENTER).perform()
             questions_list.add((label, text_area.get_attribute("value"), "textarea", prev_answer))
-
+            ##<
             continue
 
         # Check if it's a checkbox question
@@ -1428,7 +1428,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
 
                     
                     if use_AI and description != "Unknown":
-
+                        ##> ------ Yang Li : MARKYangL - Feature ------
                         try:
                             if ai_provider.lower() == "openai":
                                 skills = ai_extract_skills(aiClient, description)
@@ -1442,7 +1442,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                         except Exception as e:
                             print_lg("Failed to extract skills:", e)
                             skills = "Error extracting skills"
-
+                        ##<
 
                     uploaded = False
                     # Case 1: Easy Apply Button
@@ -1463,7 +1463,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                                     if next_counter >= 15: 
                                         if pause_at_failed_question:
                                             screenshot(driver, job_id, "Needed manual intervention for failed question")
-                                            # Bot will not show alert pop-ups in automated mode
+                                            pyautogui.alert("Couldn't answer one or more questions.\nPlease click \"Continue\" once done.\nDO NOT CLICK Back, Next or Review button in LinkedIn.\n\n\n\n\nYou can turn off \"Pause at failed question\" setting in config.yaml\nTo TEMPORARILY disable pausing, click \"Disable Pause\"", "Help Needed", "Continue")
                                             next_counter = 1
                                             continue
                                         if questions_list: print_lg("Stuck for one or some of the following questions...", questions_list)
@@ -1486,13 +1486,18 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                                 wait_span_click(driver, "Review", 1, scrollTop=True)
                                 cur_pause_before_submit = pause_before_submit
                                 if errored != "stuck" and cur_pause_before_submit:
-                                    decision = "Submit Application" # Proceed automatically
+                                    decision = pyautogui.confirm('1. Please verify your information.\n2. If you edited something, please return to this final screen.\n3. DO NOT CLICK "Submit Application".\n\n\n\n\nYou can turn off "Pause before submit" setting in config.yaml\nTo TEMPORARILY disable pausing, click "Disable Pause"', "Confirm your information",["Disable Pause", "Discard Application", "Submit Application"])
                                     if decision == "Discard Application": raise Exception("Job application discarded by user!")
                                     pause_before_submit = False if "Disable Pause" == decision else True
+                                    # try_xp(modal, ".//span[normalize-space(.)='Review']")
                                 follow_company(modal)
                                 if wait_span_click(driver, "Submit application", 2, scrollTop=True): 
                                     date_applied = datetime.now()
                                     if not wait_span_click(driver, "Done", 2): actions.send_keys(Keys.ESCAPE).perform()
+                                elif errored != "stuck" and cur_pause_before_submit and "Yes" in pyautogui.confirm("You submitted the application, didn't you 😒?", "Failed to find Submit Application!", ["Yes", "No"]):
+                                    date_applied = datetime.now()
+                                    # wait_span_click(driver, "Done", 2)
+                                    pass
                                 else:
                                     print_lg("Since, Submit Application failed, discarding the job application...")
                                     # if screenshot_name == "Not Available":  screenshot_name = screenshot(driver, job_id, "Failed to click Submit application")
@@ -1636,7 +1641,7 @@ def main() -> None:
         
         # Validate configuration
         if not os.path.exists(default_resume_path):
-            print(f"⚠️ Warning: Missing resume at {default_resume_path}. Using LinkedIn default.")
+            pyautogui.alert(text='Your default resume "{}" is missing! Please update it\'s folder path "default_resume_path" in config.yaml\n\nOR\n\nAdd a resume with exact name and path (check for spelling mistakes including cases).\n\n\nFor now the bot will continue using your previous upload from LinkedIn!'.format(default_resume_path), title="Missing Resume", button="OK")
             useNewResume = False
         
         # Login to LinkedIn
@@ -1660,13 +1665,13 @@ def main() -> None:
         if use_AI:
             if ai_provider == "openai":
                 aiClient = ai_create_openai_client()
-
+            ##> ------ Yang Li : MARKYangL - Feature ------
             # Create DeepSeek client
             elif ai_provider == "deepseek":
                 aiClient = deepseek_create_client()
             elif ai_provider == "gemini":
                 aiClient = gemini_create_client()
-
+            ##<
 
             try:
                 about_company_for_ai = " ".join([word for word in (first_name+" "+last_name).split() if len(word) > 3])
@@ -1696,6 +1701,7 @@ def main() -> None:
         print_lg("Browser window closed or session is invalid. Exiting.", e)
     except Exception as e:
         critical_error_log("In Applier Main", e)
+        pyautogui.alert(e,alert_title)
     finally:
         print_lg("\n\nTotal runs:                     {}".format(total_runs))
         print_lg("Jobs Easy Applied:              {}".format(easy_applied_count))
@@ -1719,12 +1725,14 @@ def main() -> None:
             "Obstacles are those frightful things you see when you take your eyes off your goal. - Henry Ford",
             "The only limit to our realization of tomorrow will be our doubts of today. - Franklin D. Roosevelt"
             ])
-        msg = f"\n{quote}\n\n\nBest regards,\nSunil Poli\nhttps://www.linkedin.com/in/sunil-poli/\n\n"
+        msg = f"\n{quote}\n\n\nBest regards,\nSai Vignesh Golla\nhttps://www.linkedin.com/in/saivigneshgolla/\n\n"
+        pyautogui.alert(msg, "Exiting..")
         print_lg(msg,"Closing the browser...")
         if tabs_count >= 10:
             msg = "NOTE: IF YOU HAVE MORE THAN 10 TABS OPENED, PLEASE CLOSE OR BOOKMARK THEM!\n\nOr it's highly likely that application will just open browser and not do anything next time!" 
+            pyautogui.alert(msg,"Info")
             print_lg("\n"+msg)
-
+        ##> ------ Yang Li : MARKYangL - Feature ------
         if use_AI and aiClient:
             try:
                 if ai_provider.lower() == "openai":
@@ -1736,7 +1744,7 @@ def main() -> None:
                 print_lg(f"Closed {ai_provider} AI client.")
             except Exception as e:
                 print_lg("Failed to close AI client:", e)
-
+        ##<
         # Save final counts
         candidate_name = f"{first_name.lower()}"
         get_candidate_counts(candidate_name, counts_data).update({

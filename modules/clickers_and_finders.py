@@ -1,19 +1,7 @@
-'''
-Author:     Sai Vignesh Golla
-LinkedIn:   https://www.linkedin.com/in/saivigneshgolla/
 
-Copyright (C) 2024 Sai Vignesh Golla
-
-License:    GNU Affero General Public License
-            https://www.gnu.org/licenses/agpl-3.0.en.html
-            
-GitHub:     https://github.com/GodsScion/Auto_job_applier_linkedIn
-
-version:    24.12.29.12.30
-'''
-
-from config.settings import click_gap, smooth_scroll
+from config.loader import *
 from modules.helpers import buffer, print_lg, sleep
+from modules.shadow_dom_handler import find_and_click_robust, find_in_shadow_root, robust_click, is_element_visible
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -23,6 +11,57 @@ from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.common.action_chains import ActionChains
 
 # Click Functions
+
+
+def wait_span_click_enhanced(driver: WebDriver, text: str, time: float=5.0, click: bool=True, scroll: bool=True, scrollTop: bool=False) -> WebElement | bool:
+    '''
+    Enhanced version of wait_span_click that handles both light DOM and Shadow DOM elements.
+    Uses robust clicking strategies to ensure element interaction even if hidden or in shadow roots.
+    
+    Flow:
+    1. Try finding in light DOM with XPath
+    2. If not found, search recursively through Shadow DOM using JavaScript
+    3. Use robust click with multiple fallback strategies
+    4. Return WebElement if found and clicked
+    
+    - Returns `WebElement` if found, else `False` if not found.
+    - Clicks on it if `click = True`.
+    - Will spend a max of `time` seconds in searching for each element.
+    - Will scroll to the element if `scroll = True`.
+    - Will scroll to the top if `scrollTop = True`.
+    '''
+    if text:
+        try:
+            # Try light DOM first
+            try:
+                button = WebDriverWait(driver, 2).until(EC.presence_of_element_located((By.XPATH, './/span[normalize-space(.)="'+text+'"]')))
+                print_lg(f"Found '{text}' in light DOM")
+            except:
+                # Try shadow DOM
+                button = find_in_shadow_root(driver, text, time)
+                if button:
+                    print_lg(f"Found '{text}' in Shadow DOM")
+                else:
+                    print_lg(f"Element '{text}' not found in light DOM or Shadow DOM")
+                    return False
+            
+            if scroll:
+                scroll_to_view(driver, button, scrollTop)
+            
+            if click:
+                success = robust_click(driver, button, text)
+                if success:
+                    return button
+                else:
+                    print_lg(f"Failed to click '{text}' despite finding it")
+                    return False
+            
+            return button
+        except Exception as e:
+            print_lg(f"Click Failed! Didn't find or click '{text}': {str(e)}")
+            return False
+
+
 def wait_span_click(driver: WebDriver, text: str, time: float=5.0, click: bool=True, scroll: bool=True, scrollTop: bool=False) -> WebElement | bool:
     '''
     Finds the span element with the given `text`.
@@ -51,9 +90,9 @@ def multi_sel(driver: WebDriver, texts: list, time: float=5.0) -> None:
     - Will spend a max of `time` seconds in searching for each element.
     '''
     for text in texts:
-        ##> ------ Dheeraj Deshwal : dheeraj20194@iiitd.ac.in/dheerajdeshwal9811@gmail.com - Bug fix ------
+
         wait_span_click(driver, text, time, False)
-        ##<
+
         try:
             button = WebDriverWait(driver,time).until(EC.presence_of_element_located((By.XPATH, './/span[normalize-space(.)="'+text+'"]')))
             scroll_to_view(driver, button)
@@ -102,16 +141,34 @@ def find_by_class(driver: WebDriver, class_name: str, time: float=5.0) -> WebEle
     return WebDriverWait(driver, time).until(EC.presence_of_element_located((By.CLASS_NAME, class_name)))
 
 # Scroll functions
-def scroll_to_view(driver: WebDriver, element: WebElement, top: bool = False, smooth_scroll: bool = smooth_scroll) -> None:
-    '''
-    Scrolls the `element` to view.
-    - `smooth_scroll` will scroll with smooth behavior.
-    - `top` will scroll to the `element` to top of the view.
-    '''
+# def scroll_to_view(driver: WebDriver, element: WebElement, top: bool = False, smooth_scroll: bool = smooth_scroll) -> None:
+#     '''
+#     Scrolls the `element` to view.
+#     - `smooth_scroll` will scroll with smooth behavior.
+#     - `top` will scroll to the `element` to top of the view.
+#     '''
+#     if top:
+#         return driver.execute_script('arguments[0].scrollIntoView();', element)
+#     behavior = "smooth" if smooth_scroll else "instant"
+#     return driver.execute_script('arguments[0].scrollIntoView({block: "center", behavior: "'+behavior+'" });', element)
+def scroll_to_view(driver: WebDriver, element: WebElement, top: bool = False, smooth_scroll: bool = None) -> None:
+    """
+    Scrolls the element into view.
+    - If smooth_scroll is None, it tries to read the global smooth_scroll injected by loader.py.
+    - top=True forces normal scrollIntoView().
+    """
+    if smooth_scroll is None:
+        # Try to use the global setting injected by loader
+        smooth_scroll = globals().get("smooth_scroll", False)
+
     if top:
         return driver.execute_script('arguments[0].scrollIntoView();', element)
+
     behavior = "smooth" if smooth_scroll else "instant"
-    return driver.execute_script('arguments[0].scrollIntoView({block: "center", behavior: "'+behavior+'" });', element)
+    return driver.execute_script(
+        'arguments[0].scrollIntoView({block: "center", behavior: "%s" });' % behavior,
+        element
+    )
 
 # Enter input text functions
 def text_input_by_ID(driver: WebDriver, id: str, value: str, time: float=5.0) -> None | Exception:

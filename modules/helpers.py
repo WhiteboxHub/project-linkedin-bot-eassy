@@ -119,8 +119,7 @@ def print_lg(*msgs: str | dict, end: str = "\n", pretty: bool = False, flush: bo
                 file.write(str(message) + end)
     except Exception as e:
         trail = f'Skipped saving this message: "{message}" to log.txt!' if from_critical else "We'll try one more time to log..."
-        # Bot will not show alert pop-ups
-        print(f"⚠️ Warning: log.txt is occupied. {trail}")
+        alert(f"log.txt in {logs_folder_path} is open or is occupied by another program! Please close it! {trail}", "Failed Logging")
         if not from_critical:
             critical_error_log("Log.txt is open or is occupied by another program!", e)
 #>
@@ -159,9 +158,7 @@ def manual_login_retry(is_logged_in: callable, limit: int = 2) -> None:
             button = "Skip Confirmation"
             message = 'If you\'re seeing this message even after you logged in, Click "{}". Seems like auto login confirmation failed!'.format(button)
         count += 1
-        print_lg(f"Waiting for manual login... (Attempt {count})")
-        # if alert(message, "Login Required", button) and count > limit: return
-        sleep(10) # Give some time if not using pop-up
+        if alert(message, "Login Required", button) and count > limit: return
 
 
 
