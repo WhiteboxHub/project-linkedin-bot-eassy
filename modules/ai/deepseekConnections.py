@@ -1,6 +1,6 @@
-##> ------ Yang Li : MARKYangL - Feature ------
-from config.secrets import *
-from config.settings import showAiErrorAlerts
+
+# from config.secrets import *
+# from config.settings import showAiErrorAlerts
 from modules.helpers import print_lg, critical_error_log, convert_to_json
 from modules.ai.prompts import *
 
@@ -10,39 +10,44 @@ from openai.types.model import Model
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from typing import Iterator, Literal
 
+# These will be populated from globals() in runAiBot.py or __main__
+use_AI = False
+llm_api_key = ""
+llm_api_url = ""
+llm_model = ""
+stream_output = False
+showAiErrorAlerts = False
+
 def deepseek_create_client() -> OpenAI | None:
     '''
     Creates a DeepSeek client using the OpenAI compatible API.
     * Returns an OpenAI-compatible client configured for DeepSeek
     '''
     try:
+        import __main__
+        ua = getattr(__main__, 'use_AI', False)
+        ak = getattr(__main__, 'llm_api_key', "")
+        au = getattr(__main__, 'llm_api_url', "https://api.deepseek.com")
+        am = getattr(__main__, 'llm_model', "deepseek-chat")
+        
         print_lg("Creating DeepSeek client...")
-        if not use_AI:
-            raise ValueError("AI is not enabled! Please enable it by setting `use_AI = True` in `secrets.py` in `config` folder.")
+        if not ua:
+            return None
         
-        ##> ------ Tim L : tulxoro - Refactor ------
-        base_url = llm_api_url
-        
-
+        base_url = au
         if base_url.endswith('/'):
             base_url = base_url[:-1]
         
         # Create client with DeepSeek endpoint
-        client = OpenAI(base_url=base_url, api_key=llm_api_key)
+        client = OpenAI(base_url=base_url, api_key=ak)
         
         print_lg("---- SUCCESSFULLY CREATED DEEPSEEK CLIENT! ----")
         print_lg(f"Using API URL: {base_url}")
-        print_lg(f"Using Model: {llm_model}")
-        print_lg("Check './config/secrets.py' for more details.\n")
-        print_lg("---------------------------------------------")
-        ##<
+        print_lg(f"Using Model: {am}")
         return client
     except Exception as e:
-        error_message = f"Error occurred while creating DeepSeek client. Make sure your API connection details are correct."
+        error_message = f"Error occurred while creating DeepSeek client."
         critical_error_log(error_message, e)
-        if showAiErrorAlerts:
-            if "Pause AI error alerts" == confirm(f"{error_message}\n{str(e)}", "DeepSeek Connection Error", ["Pause AI error alerts", "Okay Continue"]):
-                showAiErrorAlerts = False
         return None
 
 def deepseek_model_supports_temperature(model_name: str) -> bool:
@@ -67,7 +72,7 @@ def deepseek_completion(client: OpenAI, messages: list[dict], response_format: d
     '''
     if not client: 
         raise ValueError("DeepSeek client is not available!")
-    ##> ------ Tim L : tulxoro - Improvement ------
+
     # Set up parameters for the API call
     params = {
         
@@ -92,7 +97,7 @@ def deepseek_completion(client: OpenAI, messages: list[dict], response_format: d
         print_lg(f"Using model: {llm_model}")
         print_lg(f"Message count: {len(messages)}")
         completion = client.chat.completions.create(**params)
-    ##<
+
         result = ""
         
         # Process the response
@@ -233,4 +238,4 @@ def deepseek_answer_question(
     except Exception as e:
         critical_error_log("Error occurred while answering question with DeepSeek!", e)
         return {"error": str(e)}
-##< 
+

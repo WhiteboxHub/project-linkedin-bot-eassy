@@ -1,42 +1,68 @@
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# IDEs
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
 .vscode/
 .idea/
-.project
-.pydevproject
-.settings/
+*.swp
+*.swo
+*~
 
-# Bot data and History
-"all excels/"
-"all resumes/"
-"logs/"
-"output/"
-"generated/"
-"bot_profile/"
-counts.json
+# Project Specific - User Data
+all excels/
+all resumes/
+output/
+logs/
+screenshots/
 
-# Environment and Virtual Envs
-venv/
-.venv/
-env/
-ENV/
-.env
-
-# Credentials and Personal Configs
-"secrets.py"
-"config/personals.py"
-"config/candidates/*.yaml"
+# Project Specific - Sensitive Files
+config/secrets.py
+config/personals.py
+config/candidates/*.yaml
 apikeys.py
-*.pdf
-*.csv
-*.xlsx
+*.env
 
-# Other
+# Project Specific - Legacy/Deprecated
 old/
-temp/
-tmp/
+config/search.py
+config/questions.py
+config/settings.py
+
+# Temporary Files
+*.tmp
 *.log
+*.txt.bak
+final_token.txt
+token_output.txt
+test_*.py
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

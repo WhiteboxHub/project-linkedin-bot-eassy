@@ -1,19 +1,6 @@
-"""
-Author:     Sai Vignesh Golla
-LinkedIn:   https://www.linkedin.com/in/saivigneshgolla/
-
-Copyright (C) 2024 Sai Vignesh Golla
-
-License:    GNU Affero General Public License
-            https://www.gnu.org/licenses/agpl-3.0.en.html
-            
-GitHub:     https://github.com/GodsScion/Auto_job_applier_linkedIn
-
-version:    24.12.29.12.30
-"""
 
 
-##> Common Response Formats
+
 array_of_strings = {"type": "array", "items": {"type": "string"}}
 """
 Response schema to represent array of strings `["string1", "string2"]`
@@ -21,7 +8,7 @@ Response schema to represent array of strings `["string1", "string2"]`
 #<
 
 
-##> Extract Skills
+
 
 # Structure of messages = `[{"role": "user", "content": extract_skills_prompt}]`
 
@@ -106,8 +93,8 @@ Response schema for `extract_skills` function
 """
 #<
 
-##> ------ Dheeraj Deshwal : dheeraj9811 Email:dheeraj20194@iiitd.ac.in/dheerajdeshwal9811@gmail.com - Feature ------
-##> Answer Questions
+
+
 # Structure of messages = `[{"role": "user", "content": answer_questions_prompt}]`
 
 ai_answer_prompt = """
