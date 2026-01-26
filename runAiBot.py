@@ -622,7 +622,14 @@ def apply_filters() -> None:
     try:
         recommended_wait = 1 if click_gap < 1 else 0
 
-        wait.until(EC.presence_of_element_located((By.XPATH, '//button[normalize-space()="All filters"]'))).click()
+        # Try to find and click "All filters" button with more flexibility
+        all_filters_xpath = '//button[contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "all filters")]'
+        try:
+            wait.until(EC.presence_of_element_located((By.XPATH, all_filters_xpath))).click()
+        except:
+             # Fallback to secondary XPath if the first one fails
+             wait.until(EC.presence_of_element_located((By.XPATH, '//button[contains(., "filters")]'))).click()
+             
         buffer(recommended_wait)
 
         wait_span_click(driver, sort_by)
@@ -658,16 +665,27 @@ def apply_filters() -> None:
         multi_sel_noWait(driver, commitments)
         if benefits or commitments: buffer(recommended_wait)
 
-        show_results_button: WebElement = driver.find_element(By.XPATH, '//button[contains(@aria-label, "Apply current filters to show")]')
-        show_results_button.click()
+        # Click "Show results"
+        try:
+            show_results_button: WebElement = wait.until(EC.element_to_be_clickable((By.XPATH, '//button[contains(@aria-label, "Apply current filters to show") or contains(., "Show results")]')))
+            show_results_button.click()
+        except:
+            # If standard button not found, try any button that looks like a submit in the modal
+            try_xp(driver, '//div[@role="dialog"]//button[@type="submit"]')
+            try_xp(driver, '//button[contains(@class, "search-reusables__filter-pull-button")]')
 
         global pause_after_filters
         if pause_after_filters and "Turn off Pause after search" == pyautogui.confirm("These are your configured search results and filter. It is safe to change them while this dialog is open, any changes later could result in errors and skipping this search run.", "Please check your results", ["Turn off Pause after search", "Look's good, Continue"]):
             pause_after_filters = False
 
     except Exception as e:
-        print_lg("Setting the preferences failed!")
-        # print_lg(e)
+        print_lg(f"Setting the preferences failed! Error: {e}")
+        # Try to close the modal if it's still open to prevent blocking the UI
+        try:
+            dismiss_button = driver.find_element(By.XPATH, '//button[@aria-label="Dismiss" or @aria-label="Close"]')
+            dismiss_button.click()
+        except:
+            pass
 
 
 
@@ -739,9 +757,18 @@ def get_job_main_details(job: WebElement, blacklisted_companies: set, rejected_j
 
 # Function to check for Blacklisted words in About Company
 def check_blacklist(rejected_jobs: set, job_id: str, company: str, blacklisted_companies: set) -> tuple[set, set, WebElement] | ValueError:
-    jobs_top_card = try_find_by_classes(driver, ["job-details-jobs-unified-top-card__primary-description-container","job-details-jobs-unified-top-card__primary-description","jobs-unified-top-card__primary-description","jobs-details__main-content"])
-    about_company_org = find_by_class(driver, "jobs-company__box")
-    scroll_to_view(driver, about_company_org)
+    try:
+        jobs_top_card = try_find_by_classes(driver, ["job-details-jobs-unified-top-card__primary-description-container","job-details-jobs-unified-top-card__primary-description","jobs-unified-top-card__primary-description","jobs-details__main-content"])
+    except:
+        jobs_top_card = None
+
+    try:
+        about_company_org = find_by_class(driver, "jobs-company__box", 2)
+        scroll_to_view(driver, about_company_org)
+    except Exception as e:
+        # If we couldn't find the About Company section, we still return what we have (even if jobs_top_card is None)
+        # to prevent crashing the whole job loop.
+        return rejected_jobs, blacklisted_companies, jobs_top_card
     about_company_org = about_company_org.text
     about_company = about_company_org.lower()
     skip_checking = False
@@ -757,7 +784,9 @@ def check_blacklist(rejected_jobs: set, job_id: str, company: str, blacklisted_c
                 blacklisted_companies.add(company)
                 raise ValueError(f'\n"{about_company_org}"\n\nContains "{word}".')
     buffer(click_gap)
-    scroll_to_view(driver, jobs_top_card)
+    if jobs_top_card:
+        try: scroll_to_view(driver, jobs_top_card)
+        except: pass
     return rejected_jobs, blacklisted_companies, jobs_top_card
 
 
@@ -1365,6 +1394,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                     questions_list = None
                     screenshot_name = "Not Available"
 
+                    jobs_top_card = None
                     try:
                         rejected_jobs, blacklisted_companies, jobs_top_card = check_blacklist(rejected_jobs,job_id,company,blacklisted_companies)
                     except ValueError as e:
@@ -1373,8 +1403,9 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                         skip_count += 1
                         continue
                     except Exception as e:
-                        print_lg("Failed to scroll to About Company!")
-                        # print_lg(e)
+                        print_lg(f"Warning: Failed to check blacklist or find job card for Job ID {job_id}. Continuing with limited info.")
+                        # Ensure jobs_top_card is at least None if it was already None, but it should be assigned correctly by returning None from check_blacklist now.
+                        # We don't need to do anything here as check_blacklist now returns instead of raising.
 
 
 
@@ -1406,14 +1437,15 @@ def apply_to_jobs(search_terms: list[str]) -> None:
 
                     # Calculation of date posted
                     try:
-                        # try: time_posted_text = find_by_class(driver, "jobs-unified-top-card__posted-date", 2).text
-                        # except: 
-                        time_posted_text = jobs_top_card.find_element(By.XPATH, './/span[contains(normalize-space(), " ago")]').text
-                        print("Time Posted: " + time_posted_text)
-                        if time_posted_text.__contains__("Reposted"):
-                            reposted = True
-                            time_posted_text = time_posted_text.replace("Reposted", "")
-                        date_listed = calculate_date_posted(time_posted_text.strip())
+                        if jobs_top_card:
+                            time_posted_text = jobs_top_card.find_element(By.XPATH, './/span[contains(normalize-space(), " ago")]').text
+                            print("Time Posted: " + time_posted_text)
+                            if time_posted_text.__contains__("Reposted"):
+                                reposted = True
+                                time_posted_text = time_posted_text.replace("Reposted", "")
+                            date_listed = calculate_date_posted(time_posted_text.strip())
+                        else:
+                            print_lg("Skipping date calculation as Job Card was not found.")
                     except Exception as e:
                         print_lg("Failed to calculate the date posted!",e)
 
