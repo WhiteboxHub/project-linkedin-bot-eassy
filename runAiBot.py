@@ -20,7 +20,7 @@ from selenium.webdriver.support.select import Select
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
-from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException, NoSuchWindowException, ElementNotInteractableException, WebDriverException
+from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException, NoSuchWindowException, ElementNotInteractableException, WebDriverException, StaleElementReferenceException
 
 # Replace all config imports with the loader
 from config.loader import load_candidate, extract_variables
@@ -598,7 +598,12 @@ def set_search_location() -> None:
     if search_location.strip():
         try:
             print_lg(f'Setting search location as: "{search_location.strip()}"')
-            search_location_ele = try_xp(driver, ".//input[@aria-label='City, state, or zip code'and not(@disabled)]", False) #  and not(@aria-hidden='true')]")
+            search_location_ele = try_xp(driver, ".//input[@aria-label='City, state, or zip code' and not(@disabled)]", False)
+            if not search_location_ele:
+                 search_location_ele = try_xp(driver, ".//input[contains(@placeholder, 'Location')]", False)
+            if not search_location_ele:
+                 search_location_ele = try_xp(driver, ".//input[contains(@id, 'jobs-search-box-location')]", False)
+            
             text_input(actions, search_location_ele, search_location, "Search Location")
         except ElementNotInteractableException:
             try_xp(driver, ".//label[@class='jobs-search-box__input-icon jobs-search-box__keywords-label']")
@@ -1448,6 +1453,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                             print_lg("Skipping date calculation as Job Card was not found.")
                     except Exception as e:
                         print_lg("Failed to calculate the date posted!",e)
+                        date_listed = "Unknown"
 
 
                     description, experience_required, skip, reason, message = get_job_description()
@@ -1605,6 +1611,10 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                     print_lg(f"\n>-> Didn't find Page {current_page+1}. Probably at the end page of results!\n")
                     break
 
+        except StaleElementReferenceException:
+            print_lg("Encountered stale element reference. Refreshing job listings...")
+            buffer(2)
+            continue
         except (NoSuchWindowException, WebDriverException) as e:
             print_lg("Browser window closed or session is invalid. Ending application process.", e)
             raise e # Re-raise to be caught by main
