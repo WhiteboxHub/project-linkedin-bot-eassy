@@ -11,7 +11,7 @@ import pathlib
 from time import sleep
 from random import randint
 from datetime import datetime, timedelta
-from pyautogui import alert
+# from pyautogui import alert
 from pprint import pprint
 
 # from config.loader import cfg
@@ -115,14 +115,19 @@ def print_lg(*msgs: str | dict, end: str = "\n", pretty: bool = False, flush: bo
     try:
         for message in msgs:
             pprint(message) if pretty else print(message, end=end, flush=flush)
+            
+            # Ensure directory exists before writing
+            log_dir = os.path.dirname(__logs_file_path)
+            if log_dir and not os.path.exists(log_dir):
+                os.makedirs(log_dir, exist_ok=True)
+                
             with open(__logs_file_path, 'a+', encoding="utf-8") as file:
                 file.write(str(message) + end)
     except Exception as e:
-        trail = f'Skipped saving this message: "{message}" to log.txt!' if from_critical else "We'll try one more time to log..."
-        alert(f"log.txt in {logs_folder_path} is open or is occupied by another program! Please close it! {trail}", "Failed Logging")
-        if not from_critical:
-            critical_error_log("Log.txt is open or is occupied by another program!", e)
-#>
+        # Fallback to just printing if logging fails
+        print(f"FAILED TO LOG TO FILE: {e}")
+        for message in msgs:
+            pprint(message) if pretty else print(message, end=end, flush=flush)
 
 
 def buffer(speed: int=0) -> None:

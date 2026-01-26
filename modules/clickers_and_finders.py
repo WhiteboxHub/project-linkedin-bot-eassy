@@ -11,6 +11,9 @@ from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.common.action_chains import ActionChains
 
 # Click Functions
+cfg = load_candidate()
+click_gap = cfg.get("settings", {}).get("click_gap", 5)
+smooth_scroll = cfg.get("settings", {}).get("smooth_scroll", False)
 
 
 def wait_span_click_enhanced(driver: WebDriver, text: str, time: float=5.0, click: bool=True, scroll: bool=True, scrollTop: bool=False) -> WebElement | bool:
@@ -34,7 +37,8 @@ def wait_span_click_enhanced(driver: WebDriver, text: str, time: float=5.0, clic
         try:
             # Try light DOM first
             try:
-                button = WebDriverWait(driver, 2).until(EC.presence_of_element_located((By.XPATH, './/span[normalize-space(.)="'+text+'"]')))
+                xpath = f'.//span[contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "{text.lower()}")]'
+                button = WebDriverWait(driver, 2).until(EC.presence_of_element_located((By.XPATH, xpath)))
                 print_lg(f"Found '{text}' in light DOM")
             except:
                 # Try shadow DOM
@@ -73,15 +77,21 @@ def wait_span_click(driver: WebDriver, text: str, time: float=5.0, click: bool=T
     '''
     if text:
         try:
-            button = WebDriverWait(driver,time).until(EC.presence_of_element_located((By.XPATH, './/span[normalize-space(.)="'+text+'"]')))
-            if scroll:  scroll_to_view(driver, button, scrollTop)
+            # Try case-insensitive and partial match to be more robust
+            xpath = f'.//span[contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "{text.lower()}")]'
+            button = WebDriverWait(driver, time).until(EC.presence_of_element_located((By.XPATH, xpath)))
+            
+            if scroll: scroll_to_view(driver, button, scrollTop)
             if click:
-                button.click()
+                try:
+                    button.click()
+                except:
+                    # Fallback click strategy if standard click fails
+                    driver.execute_script("arguments[0].click();", button)
                 buffer(click_gap)
             return button
         except Exception as e:
-            print_lg("Click Failed! Didn't find '"+text+"'")
-            # print_lg(e)
+            print_lg(f"Click Failed! Didn't find '{text}'")
             return False
 
 def multi_sel(driver: WebDriver, texts: list, time: float=5.0) -> None:
@@ -94,13 +104,16 @@ def multi_sel(driver: WebDriver, texts: list, time: float=5.0) -> None:
         wait_span_click(driver, text, time, False)
 
         try:
-            button = WebDriverWait(driver,time).until(EC.presence_of_element_located((By.XPATH, './/span[normalize-space(.)="'+text+'"]')))
+            xpath = f'.//span[contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "{text.lower()}")]'
+            button = WebDriverWait(driver, time).until(EC.presence_of_element_located((By.XPATH, xpath)))
             scroll_to_view(driver, button)
-            button.click()
+            try:
+                button.click()
+            except:
+                driver.execute_script("arguments[0].click();", button)
             buffer(click_gap)
         except Exception as e:
-            print_lg("Click Failed! Didn't find '"+text+"'")
-            # print_lg(e)
+            print_lg(f"Click Failed! Didn't find '{text}'")
 
 def multi_sel_noWait(driver: WebDriver, texts: list, actions: ActionChains = None) -> None:
     '''
@@ -110,14 +123,17 @@ def multi_sel_noWait(driver: WebDriver, texts: list, actions: ActionChains = Non
     '''
     for text in texts:
         try:
-            button = driver.find_element(By.XPATH, './/span[normalize-space(.)="'+text+'"]')
+            xpath = f'.//span[contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "{text.lower()}")]'
+            button = driver.find_element(By.XPATH, xpath)
             scroll_to_view(driver, button)
-            button.click()
+            try:
+                button.click()
+            except:
+                driver.execute_script("arguments[0].click();", button)
             buffer(click_gap)
         except Exception as e:
-            if actions: company_search_click(driver,actions,text)
-            else:   print_lg("Click Failed! Didn't find '"+text+"'")
-            # print_lg(e)
+            if actions: company_search_click(driver, actions, text)
+            else: print_lg(f"Click Failed! Didn't find '{text}'")
 
 def boolean_button_click(driver: WebDriver, actions: ActionChains, text: str) -> None:
     '''
