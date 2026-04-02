@@ -3,15 +3,20 @@
 import os
 import csv
 import re
+import json
 import pyautogui
 import requests
-from selenium import webdriver
-
-# Set CSV field size limit to prevent field size errors
-csv.field_size_limit(1000000)  # Set to 1MB instead of default 131KB
-
+from time import sleep
 from random import choice, shuffle, randint
 from datetime import datetime
+from dotenv import load_dotenv
+from selenium import webdriver
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Set CSV field size limit to prevent field size errors
+csv.field_size_limit(1000000)
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
@@ -32,6 +37,7 @@ from modules.validator import validate_config
 from modules.ai.openaiConnections import ai_create_openai_client, ai_extract_skills, ai_answer_question, ai_close_openai_client
 from modules.ai.deepseekConnections import deepseek_create_client, deepseek_extract_skills, deepseek_answer_question
 from modules.ai.geminiConnections import gemini_create_client, gemini_extract_skills, gemini_answer_question
+from modules.filtering import *
 
 from typing import Literal
 
@@ -61,6 +67,10 @@ middle_name = middle_name.strip()
 last_name = last_name.strip()
 full_name = first_name + " " + middle_name + " " + last_name if middle_name else first_name + " " + last_name
 
+# API Configuration (Dynamic fallback to full_name)
+API_OPERATOR_NAME = os.environ.get("API_OPERATOR_NAME") or full_name
+
+
 useNewResume = True
 randomly_answered_questions = set()
 
@@ -70,10 +80,10 @@ external_jobs_count = 0
 failed_count = 0
 skip_count = 0
 dailyEasyApplyLimitReached = False
+pending_activity_logs = []
+
 
 #< Count persistence functions
-import json
-from datetime import datetime
 
 COUNTS_FILE = "output/counts.json"
 
@@ -132,13 +142,113 @@ def update_candidate_count(candidate_name, count_type, counts_data):
     save_counts(counts_data)
 
 #< Website API integration
-# Hardcoded values - change as needed
-WEBSITE_URL = "https://whitebox-learning.com/"
-API_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJwc3VuaWw1NTQzM0BnbWFpbC5jb20iLCJleHAiOjE3OTc2MDYzNzJ9.K1dJJgvPwC4YQgORz0qLGbGEJkDMzEDrwuux16nAnoQ"  # Auto-generated 1-year token for psunil55433@gmail.com
+# Load from environment variables
+# Website API Configuration
+WBL_API_URL = os.environ.get("WBL_API_URL", "https://api.whitebox-learning.com/api")
+SECRET_KEY = os.environ.get("SECRET_KEY", "")
+API_EMAIL = os.environ.get("API_EMAIL", "")
+API_PASSWORD = os.environ.get("API_PASSWORD", "")
+API_TOKEN = os.environ.get("WEBSITE_API_TOKEN", "")
+
+
+# Cache file for API token (matching reference code format)
+API_TOKEN_CACHE_FILE = "data/.api_token.json"
+
+def get_api_token(force_refresh=False):
+    """
+    Get API token - first check cache, then authenticate with email/password if needed.
+    """
+    global API_TOKEN
+    
+    # If force refresh requested, clear existing token and cache
+    if force_refresh:
+        print_lg("Force refreshing API token...")
+        API_TOKEN = ""
+        if os.path.exists(API_TOKEN_CACHE_FILE):
+            try:
+                os.remove(API_TOKEN_CACHE_FILE)
+                print_lg("Cleared cached token file.")
+            except Exception as e:
+                print_lg(f"Could not remove cache file: {e}")
+    
+    # If already have token in memory, use it
+    if API_TOKEN:
+        return API_TOKEN
+    
+    # Check cache file first
+    if os.path.exists(API_TOKEN_CACHE_FILE):
+        try:
+            with open(API_TOKEN_CACHE_FILE, 'r') as f:
+                cached = json.load(f)
+                token = cached.get('access_token')
+                if token:
+                    expiry_ts = cached.get('expiry_ts')
+                    if expiry_ts and int(expiry_ts) < int(datetime.now().timestamp()):
+                        print_lg("Cached API token has expired; re-authenticating...")
+                    else:
+                        print_lg(f"Using cached API token from {API_TOKEN_CACHE_FILE}")
+                        API_TOKEN = token
+                        return token
+        except Exception as e:
+            print_lg(f"Error reading cached token: {e}")
+
+    
+    # Authenticate using email/password if provided
+    if API_EMAIL and API_PASSWORD:
+        print_lg("Attempting to authenticate with website...")
+        try:
+            # Use correct endpoint and OAuth2 form data
+            login_url = f"{WBL_API_URL}/login"
+            
+            # OAuth2 form data (not JSON!)
+            form_data = {
+                "username": API_EMAIL,
+                "password": API_PASSWORD,
+                "grant_type": "password"
+            }
+            
+            response = requests.post(login_url, data=form_data, timeout=30)
+            
+            if response.status_code == 200:
+                data = response.json()
+                token = data.get('access_token')
+                
+                if token:
+                    # Get expiry if available
+                    expires_in = data.get('expires_in')
+                    expiry_ts = None
+                    if isinstance(expires_in, (int, float)):
+                        expiry_ts = int(datetime.now().timestamp()) + int(expires_in)
+                    
+                    # Cache the token in correct format
+                    os.makedirs("data", exist_ok=True)
+                    with open(API_TOKEN_CACHE_FILE, 'w') as f:
+                        json.dump({
+                            "access_token": token,
+                            "expiry_ts": expiry_ts
+                        }, f, indent=2)
+                    
+                    API_TOKEN = token
+                    print_lg("✅ Successfully authenticated and cached API token!")
+                    return token
+                else:
+                    print_lg(f"Login response didn't contain access_token: {data}")
+            else:
+                print_lg(f"Authentication failed with status {response.status_code}: {response.text[:200]}")
+        except Exception as e:
+            print_lg(f"Authentication error: {e}")
+    
+    return ""
 
 # Cache for the dynamically fetched IDs
 _CACHED_JOB_TYPE_ID = None
 _CACHED_CANDIDATE_ID = None
+
+# Get API token at startup (auto-authenticate if needed)
+API_TOKEN = get_api_token()
+
+# For backward compatibility with existing code that uses WEBSITE_URL
+WEBSITE_URL = WBL_API_URL
 
 def get_job_type_id():
     """Dynamically find OR CREATE a Job Type ID to use for logging."""
@@ -150,15 +260,23 @@ def get_job_type_id():
 
     headers = {
         "Authorization": f"Bearer {API_TOKEN}",
+        "X-Secret-Key": SECRET_KEY,
         "Content-Type": "application/json"
     }
 
     try:
         # 1. Try to find existing job type
-        url_get = f"{WEBSITE_URL.rstrip('/')}/api/job-types"
+        url_get = f"{WEBSITE_URL.rstrip('/')}/job-types"
         response = requests.get(url_get, headers=headers, timeout=10)
         
+        if response.status_code == 401:
+             print_lg("Token rejected (401) in get_job_type_id. Refreshing...")
+             get_api_token(force_refresh=True)
+             headers["Authorization"] = f"Bearer {API_TOKEN}"
+             response = requests.get(url_get, headers=headers, timeout=10)
+
         if response.status_code == 200:
+
             data = response.json()
             jobs = data if isinstance(data, list) else data.get("data", [])
             for job in jobs:
@@ -181,7 +299,7 @@ def get_job_type_id():
 
             # 2. Need an employee ID for the job owner (required field)
             try:
-                emp_url = f"{WEBSITE_URL.rstrip('/')}/api/employees"
+                emp_url = f"{WEBSITE_URL.rstrip('/')}/employees"
                 emp_resp = requests.get(emp_url, headers=headers, timeout=10)
                 owner_id = 1 # Default fallback
                 if emp_resp.status_code == 200:
@@ -194,7 +312,7 @@ def get_job_type_id():
                 owner_id = 1
 
             # 3. Create the Job Type
-            create_url = f"{WEBSITE_URL.rstrip('/')}/api/job-types"
+            create_url = f"{WEBSITE_URL.rstrip('/')}/job-types"
             new_job_payload = {
                 "unique_id": f"LNK-{datetime.now().strftime('%Y%m')}",
                 "name": "Bot Linkedin Easy Apply", # UPDATED NAME
@@ -232,40 +350,46 @@ def get_candidate_id():
     if not API_TOKEN: return None
 
     try:
-        url = f"{WEBSITE_URL.rstrip('/')}/api/candidates"
+        url = f"{WEBSITE_URL.rstrip('/')}/candidates"
         headers = {
             "Authorization": f"Bearer {API_TOKEN}",
             "Content-Type": "application/json"
         }
         response = requests.get(url, headers=headers, timeout=10)
         
+        if response.status_code == 401:
+             print_lg("Token rejected (401) in get_candidate_id. Refreshing...")
+             get_api_token(force_refresh=True)
+             headers["Authorization"] = f"Bearer {API_TOKEN}"
+             response = requests.get(url, headers=headers, timeout=10)
+
         if response.status_code == 200:
+
             data = response.json()
             candidates = data if isinstance(data, list) else data.get("data", [])
             
-            target_first = first_name.strip().lower()
-            target_last = last_name.strip().lower()
-            # Use email from config (now extracted by loader.py)
-            target_email = globals().get('email', '').strip().lower()
+            # Search by full_name only
+            
+            target_full_name = full_name.strip().lower()
+            
+            print_lg(f"🔍 Searching for Candidate by full_name: {target_full_name}")
 
-            print_lg(f"🔍 Searching for Candidate: {target_first} {target_last} ({target_email})")
-
-            # 1. Try matching by email (most accurate)
+            # Try matching by full_name
             for cand in candidates:
-                c_email = str(cand.get('email', '')).strip().lower()
-                if c_email == target_email:
-                    _CACHED_CANDIDATE_ID = cand["id"]
-                    print_lg(f"✅ Email Match found! Using Candidate ID: {_CACHED_CANDIDATE_ID}")
-                    return _CACHED_CANDIDATE_ID
-
-            # 2. Strict Name Match
-            for cand in candidates:
-                c_first = str(cand.get('first_name', '')).strip().lower()
-                c_last = str(cand.get('last_name', '')).strip().lower()
+                c_full_name = str(cand.get('full_name', '')).strip().lower()
                 
-                if (target_first in c_first and target_last in c_last) or (c_first in target_first and c_last in target_last):
+                if c_full_name == target_full_name:
                     _CACHED_CANDIDATE_ID = cand["id"]
-                    print_lg(f"✅ Name Match found! Using Candidate: {cand.get('first_name')} {cand.get('last_name')} (ID: {_CACHED_CANDIDATE_ID})")
+                    print_lg(f"✅ Full Name Match found! Using Candidate: {cand.get('full_name')} (ID: {_CACHED_CANDIDATE_ID})")
+                    return _CACHED_CANDIDATE_ID
+            
+            # Try partial match if exact match not found
+            for cand in candidates:
+                c_full_name = str(cand.get('full_name', '')).strip().lower()
+                
+                if target_full_name in c_full_name or c_full_name in target_full_name:
+                    _CACHED_CANDIDATE_ID = cand["id"]
+                    print_lg(f"✅ Partial Name Match found! Using Candidate: {cand.get('full_name')} (ID: {_CACHED_CANDIDATE_ID})")
                     return _CACHED_CANDIDATE_ID
 
             # 3. Fallback: Warn and use first one if absolutely no match, or return None to fail sync
@@ -282,32 +406,39 @@ def get_candidate_id():
     
     return None
 
-def get_full_csv_summary(candidate_name):
-    """Read the candidate's CSV and return a string of all applications (Newest First)."""
+def get_csv_summary(candidate_name, today_only=False):
+    """Read the candidate's CSV and return a string of applications."""
     try:
         csv_path = f'output/{candidate_name}.csv'
         if not os.path.exists(csv_path):
             return "No local CSV history found."
             
         summary_lines = []
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        
         with open(csv_path, mode='r', newline='', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                # Format: Timestamp,JobID,Job Title,Company,Attempted,Result
-                line = f"{row.get('Timestamp')},{row.get('JobID')},{row.get('Job Title')},{row.get('Company')},{row.get('Attempted')},{row.get('Result')}"
+                ts = row.get('Timestamp', '')
+                # Filter for today if requested
+                if today_only and not ts.startswith(today_str):
+                    continue
+                    
+                line = f"{ts},{row.get('JobID')},{row.get('Job Title')},{row.get('Company')},{row.get('Attempted')},{row.get('Result')}"
                 summary_lines.append(line)
         
         if not summary_lines:
-            return "Local CSV is empty."
+            return f"No applications {'today' if today_only else 'found'}."
             
-        # Already newest first in file, but we can reverse if needed or just join
         return "\n".join(summary_lines)
     except Exception as e:
         return f"Error reading CSV history: {e}"
 
+
 _CACHED_EMPLOYEE_ID = None
 def get_employee_id():
-    """Find the ID for the Employee (usually Sunil Poli based on dashboard)."""
+    """Find the ID for the Employee (dynamic operator name)."""
+
     global _CACHED_EMPLOYEE_ID
     if _CACHED_EMPLOYEE_ID is not None:
         return _CACHED_EMPLOYEE_ID
@@ -315,22 +446,30 @@ def get_employee_id():
     if not API_TOKEN: return None
 
     try:
-        url = f"{WEBSITE_URL.rstrip('/')}/api/candidates"
+        url = f"{WEBSITE_URL.rstrip('/')}/candidates"
         headers = {
             "Authorization": f"Bearer {API_TOKEN}",
             "Content-Type": "application/json"
         }
         response = requests.get(url, headers=headers, timeout=10)
         
+        if response.status_code == 401:
+             print_lg("Token rejected (401) in get_employee_id. Refreshing...")
+             get_api_token(force_refresh=True)
+             headers["Authorization"] = f"Bearer {API_TOKEN}"
+             response = requests.get(url, headers=headers, timeout=10)
+
         if response.status_code == 200:
+
             data = response.json()
             candidates = data if isinstance(data, list) else data.get("data", [])
             
-            # Look for Sunil Poli specifically as the operator
+            # Look for operator specifically
             for cand in candidates:
                 c_full = f"{cand.get('first_name', '')} {cand.get('last_name', '')}".lower()
-                if "sunil" in c_full and "poli" in c_full:
+                if API_OPERATOR_NAME.lower() in c_full:
                     _CACHED_EMPLOYEE_ID = cand["id"]
+
                     print_lg(f"✅ Employee Match found! ID: {_CACHED_EMPLOYEE_ID}")
                     return _CACHED_EMPLOYEE_ID
                     
@@ -367,8 +506,9 @@ def verify_integration():
             
             current_total = c_counts.get("easy_applied", 0) + c_counts.get("external", 0)
             
-            # Get the full CSV history
-            csv_summary = get_full_csv_summary(c_name)
+            # Get ONLY today's CSV history for the dashboard log
+            csv_summary = get_csv_summary(c_name, today_only=True)
+
             
             # Pass full CSV summary 
             send_activity_log(jid, datetime.now(), current_total, notes=csv_summary)
@@ -383,16 +523,28 @@ def verify_integration():
 
 # verify_integration() placeholder moved below send_activity_log
 
-def send_activity_log(job_id_unused, activity_date, activity_count=1, notes=""):
+def send_activity_log(job_id_unused, activity_date, activity_count=1, notes="", retry_count=0):
     """
     Send activity log to website API (sync daily).
-    The 'notes' will now contain CSV-style data: Timestamp | JobID | Job Title | Company | Result
     """
+    global API_TOKEN
     if not API_TOKEN:
-        print_lg("No API token configured, skipping website log.")
+        API_TOKEN = get_api_token()
+        if not API_TOKEN:
+            print_lg("No API token configured, skipping website log.")
+            return
+
+    # Check for IDs if they aren't cached yet
+    real_job_id = get_job_type_id()
+    real_candidate_id = get_candidate_id()
+    real_employee_id = get_employee_id()
+    
+    if not real_job_id or not real_candidate_id:
+        print_lg(f"⚠️ Skipping website sync: Missing Job ID ({real_job_id}) or Candidate ID ({real_candidate_id})")
         return
 
-    base_url = f"{WEBSITE_URL.rstrip('/')}/api/job_activity_logs"
+
+    base_url = f"{WEBSITE_URL.rstrip('/')}/job_activity_logs"
     headers = {
         "Authorization": f"Bearer {API_TOKEN}",
         "Content-Type": "application/json"
@@ -438,18 +590,23 @@ def send_activity_log(job_id_unused, activity_date, activity_count=1, notes=""):
                     existing_notes = log.get('notes', '')
                     break
 
-        # Prepare cumulative Notes: Avoid massive duplication
-        updated_notes = notes
+        # Prepare cumulative Notes: Smart deduplicating merge
         if existing_id and existing_notes:
-            # If notes is just a single line, prepend
-            if "\n" not in notes:
-                if notes not in existing_notes:
-                    updated_notes = f"{notes}\n{existing_notes}"
-                else:
-                    updated_notes = existing_notes
-            # If it's a bulk sync (multiple lines), we overwrite or merge intelligently
-            else:
-                updated_notes = notes 
+            new_lines = [l.strip() for l in notes.split("\n") if l.strip()]
+            old_lines = [l.strip() for l in existing_notes.split("\n") if l.strip()]
+            
+            # Combine and deduplicate while preserving "newest at top" order
+            merged = []
+            seen = set()
+            for line in new_lines + old_lines:
+                # Use sub-string check for rows to avoid minor timestamp-only duplicates if possible? 
+                # Actually exact match is safer for CSV rows.
+                if line not in seen:
+                    merged.append(line)
+                    seen.add(line)
+            updated_notes = "\n".join(merged)
+        else:
+            updated_notes = notes
 
         if existing_id:
             # 2. PUT (Update)
@@ -459,16 +616,25 @@ def send_activity_log(job_id_unused, activity_date, activity_count=1, notes=""):
                 "candidate_id": real_candidate_id,
                 "candidate_name": full_name,
                 "employee_id": real_employee_id,
-                "employee_name": "Sunil Poli",
+                "employee_name": API_OPERATOR_NAME,
                 "activity_date": date_str,
+
                 "activity_count": activity_count, 
                 "notes": updated_notes
             }
             resp = requests.put(put_url, json=payload, headers=headers, timeout=10)
+            
+            if resp.status_code == 401 and retry_count == 0:
+                print_lg("Token rejected (401). Retrying with fresh token...")
+                API_TOKEN = get_api_token(force_refresh=True)
+                return send_activity_log(job_id_unused, activity_date, activity_count, notes, retry_count=1)
+
             if resp.status_code in [200, 201, 204]:
+
                 print_lg(f"✅ WEBSITE SYNC: Updated existing log (ID: {existing_id}) to count: {activity_count}")
             else:
                  print_lg(f"❌ WEBSITE ERROR: Failed to update log via PUT. Status: {resp.status_code} | {resp.text}")
+
 
         else:
             # 3. POST (Create)
@@ -483,7 +649,14 @@ def send_activity_log(job_id_unused, activity_date, activity_count=1, notes=""):
                 "notes": notes
             }
             resp = requests.post(base_url, json=payload, headers=headers, timeout=10)
+            
+            if resp.status_code == 401 and retry_count == 0:
+                print_lg("Token rejected (401). Retrying with fresh token...")
+                API_TOKEN = get_api_token(force_refresh=True)
+                return send_activity_log(job_id_unused, activity_date, activity_count, notes, retry_count=1)
+
             if resp.status_code in [200, 201]:
+
                 print_lg(f"✅ WEBSITE SYNC: Created NEW log for today. Count: {activity_count}")
             else:
                  print_lg(f"❌ WEBSITE ERROR: Failed to POST. Status: {resp.status_code} | {resp.text}")
@@ -493,6 +666,30 @@ def send_activity_log(job_id_unused, activity_date, activity_count=1, notes=""):
 
 # Run verify at startup (moved here to avoid NameError: send_activity_log)
 verify_integration()
+
+def sync_bulk_activity_logs():
+    """Combined all pending entries from global buffer and syncs to website."""
+    global pending_activity_logs
+    if not pending_activity_logs:
+        return
+
+    print_lg(f"🔄 Bulk syncing {len(pending_activity_logs)} logs to website dashboard...")
+    
+    # Calculate current total count (using persistent counts)
+    c_data = load_counts()
+    c_name = first_name.lower()
+    c_counts = get_candidate_counts(c_name, c_data)
+    current_total = c_counts.get("easy_applied", 0) + c_counts.get("external", 0)
+
+    # Join all pending logs with newline
+    bulk_notes = "\n".join(pending_activity_logs)
+    
+    # Send to website
+    send_activity_log(get_job_type_id(), datetime.now(), current_total, notes=bulk_notes)
+    
+    # Clear buffer on success (assuming send_activity_log handles errors gracefully)
+    pending_activity_logs = []
+
 #>
 
 re_experience = re.compile(r'[(]?\s*(\d+)\s*[)]?\s*[-to]*\s*\d*[+]*\s*year[s]?', re.IGNORECASE)
@@ -574,576 +771,11 @@ def login_LN() -> None:
 
 
 
-def get_applied_job_ids() -> set:
-    '''
-    Function to get a `set` of applied job's Job IDs
-    * Returns a set of Job IDs from existing applied jobs history csv file
-    '''
-    job_ids = set()
-    try:
-        with open(file_name, 'r', encoding='utf-8') as file:
-            reader = csv.reader(file)
-            for row in reader:
-                job_ids.add(row[0])
-    except FileNotFoundError:
-        print_lg(f"The CSV file '{file_name}' does not exist.")
-    return job_ids
+# Moved to modules/filtering.py
 
 
 
-def set_search_location() -> None:
-    '''
-    Function to set search location
-    '''
-    if search_location.strip():
-        try:
-            print_lg(f'Setting search location as: "{search_location.strip()}"')
-            search_location_ele = try_xp(driver, ".//input[@aria-label='City, state, or zip code' and not(@disabled)]", False)
-            if not search_location_ele:
-                 search_location_ele = try_xp(driver, ".//input[contains(@placeholder, 'Location')]", False)
-            if not search_location_ele:
-                 search_location_ele = try_xp(driver, ".//input[contains(@id, 'jobs-search-box-location')]", False)
-            
-            text_input(actions, search_location_ele, search_location, "Search Location")
-        except ElementNotInteractableException:
-            try_xp(driver, ".//label[@class='jobs-search-box__input-icon jobs-search-box__keywords-label']")
-            actions.send_keys(Keys.TAB, Keys.TAB).perform()
-            actions.key_down(Keys.CONTROL).send_keys("a").key_up(Keys.CONTROL).perform()
-            actions.send_keys(search_location.strip()).perform()
-            sleep(2)
-            actions.send_keys(Keys.ENTER).perform()
-            try_xp(driver, ".//button[@aria-label='Cancel']")
-        except Exception as e:
-            try_xp(driver, ".//button[@aria-label='Cancel']")
-            print_lg("Failed to update search location, continuing with default location!", e)
-
-
-def apply_filters() -> None:
-    '''
-    Function to apply job search filters
-    '''
-    set_search_location()
-
-    try:
-        recommended_wait = 1 if click_gap < 1 else 0
-
-        # Try to find and click "All filters" button with more flexibility
-        all_filters_xpath = '//button[contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "all filters")]'
-        try:
-            wait.until(EC.presence_of_element_located((By.XPATH, all_filters_xpath))).click()
-        except:
-             # Fallback to secondary XPath if the first one fails
-             wait.until(EC.presence_of_element_located((By.XPATH, '//button[contains(., "filters")]'))).click()
-             
-        buffer(recommended_wait)
-
-        wait_span_click(driver, sort_by)
-        wait_span_click(driver, date_posted)
-        buffer(recommended_wait)
-
-        multi_sel_noWait(driver, experience_level) 
-        multi_sel_noWait(driver, companies, actions)
-        if experience_level or companies: buffer(recommended_wait)
-
-        multi_sel_noWait(driver, job_type)
-        multi_sel_noWait(driver, on_site)
-        if job_type or on_site: buffer(recommended_wait)
-
-        # if easy_apply_only: boolean_button_click(driver, actions, "Easy Apply")
-        
-        multi_sel_noWait(driver, location)
-        multi_sel_noWait(driver, industry)
-        if location or industry: buffer(recommended_wait)
-
-        multi_sel_noWait(driver, job_function)
-        multi_sel_noWait(driver, job_titles)
-        if job_function or job_titles: buffer(recommended_wait)
-
-        if under_10_applicants: boolean_button_click(driver, actions, "Under 10 applicants")
-        if in_your_network: boolean_button_click(driver, actions, "In your network")
-        if fair_chance_employer: boolean_button_click(driver, actions, "Fair Chance Employer")
-
-        wait_span_click(driver, salary)
-        buffer(recommended_wait)
-        
-        multi_sel_noWait(driver, benefits)
-        multi_sel_noWait(driver, commitments)
-        if benefits or commitments: buffer(recommended_wait)
-
-        # Click "Show results"
-        try:
-            show_results_button: WebElement = wait.until(EC.element_to_be_clickable((By.XPATH, '//button[contains(@aria-label, "Apply current filters to show") or contains(., "Show results")]')))
-            show_results_button.click()
-        except:
-            # If standard button not found, try any button that looks like a submit in the modal
-            try_xp(driver, '//div[@role="dialog"]//button[@type="submit"]')
-            try_xp(driver, '//button[contains(@class, "search-reusables__filter-pull-button")]')
-
-        global pause_after_filters
-        if pause_after_filters and "Turn off Pause after search" == pyautogui.confirm("These are your configured search results and filter. It is safe to change them while this dialog is open, any changes later could result in errors and skipping this search run.", "Please check your results", ["Turn off Pause after search", "Look's good, Continue"]):
-            pause_after_filters = False
-
-    except Exception as e:
-        print_lg(f"Setting the preferences failed! Error: {e}")
-        # Try to close the modal if it's still open to prevent blocking the UI
-        try:
-            dismiss_button = driver.find_element(By.XPATH, '//button[@aria-label="Dismiss" or @aria-label="Close"]')
-            dismiss_button.click()
-        except:
-            pass
-
-
-
-def get_page_info() -> tuple[WebElement | None, int | None]:
-    '''
-    Function to get pagination element and current page number
-    '''
-    try:
-        pagination_element = try_find_by_classes(driver, ["jobs-search-pagination__pages", "artdeco-pagination", "artdeco-pagination__pages"])
-        scroll_to_view(driver, pagination_element)
-        current_page = int(pagination_element.find_element(By.XPATH, "//button[contains(@class, 'active')]").text)
-    except Exception as e:
-        print_lg("Failed to find Pagination element, hence couldn't scroll till end!")
-        pagination_element = None
-        current_page = None
-        print_lg(e)
-    return pagination_element, current_page
-
-
-
-def get_job_main_details(job: WebElement, blacklisted_companies: set, rejected_jobs: set) -> tuple[str, str, str, str, str, bool]:
-    '''
-    # Function to get job main details.
-    Returns a tuple of (job_id, title, company, work_location, work_style, skip)
-    * job_id: Job ID
-    * title: Job title
-    * company: Company name
-    * work_location: Work location of this job
-    * work_style: Work style of this job (Remote, On-site, Hybrid)
-    * skip: A boolean flag to skip this job
-    '''
-    job_details_button = job.find_element(By.TAG_NAME, 'a')  # job.find_element(By.CLASS_NAME, "job-card-list__title")  # Problem in India
-    scroll_to_view(driver, job_details_button, True)
-    job_id = job.get_dom_attribute('data-occludable-job-id')
-    title = job_details_button.text
-    title = title[:title.find("\n")]
-    # company = job.find_element(By.CLASS_NAME, "job-card-container__primary-description").text
-    # work_location = job.find_element(By.CLASS_NAME, "job-card-container__metadata-item").text
-    other_details = job.find_element(By.CLASS_NAME, 'artdeco-entity-lockup__subtitle').text
-    index = other_details.find(' · ')
-    company = other_details[:index]
-    work_location = other_details[index+3:]
-    work_style = work_location[work_location.rfind('(')+1:work_location.rfind(')')]
-    work_location = work_location[:work_location.rfind('(')].strip()
-    
-    # Skip if previously rejected due to blacklist or already applied
-    skip = False
-    if company in blacklisted_companies:
-        print_lg(f'Skipping "{title} | {company}" job (Blacklisted Company). Job ID: {job_id}!')
-        skip = True
-    elif job_id in rejected_jobs: 
-        print_lg(f'Skipping previously rejected "{title} | {company}" job. Job ID: {job_id}!')
-        skip = True
-    try:
-        if job.find_element(By.CLASS_NAME, "job-card-container__footer-job-state").text == "Applied":
-            skip = True
-            print_lg(f'Already applied to "{title} | {company}" job. Job ID: {job_id}!')
-    except: pass
-    try: 
-        if not skip: job_details_button.click()
-    except Exception as e:
-        print_lg(f'Failed to click "{title} | {company}" job on details button. Job ID: {job_id}!') 
-        # print_lg(e)
-        discard_job()
-        job_details_button.click() # To pass the error outside
-    buffer(click_gap)
-    return (job_id,title,company,work_location,work_style,skip)
-
-
-# Function to check for Blacklisted words in About Company
-def check_blacklist(rejected_jobs: set, job_id: str, company: str, blacklisted_companies: set) -> tuple[set, set, WebElement] | ValueError:
-    try:
-        jobs_top_card = try_find_by_classes(driver, ["job-details-jobs-unified-top-card__primary-description-container","job-details-jobs-unified-top-card__primary-description","jobs-unified-top-card__primary-description","jobs-details__main-content"])
-    except:
-        jobs_top_card = None
-
-    try:
-        about_company_org = find_by_class(driver, "jobs-company__box", 2)
-        scroll_to_view(driver, about_company_org)
-    except Exception as e:
-        # If we couldn't find the About Company section, we still return what we have (even if jobs_top_card is None)
-        # to prevent crashing the whole job loop.
-        return rejected_jobs, blacklisted_companies, jobs_top_card
-    about_company_org = about_company_org.text
-    about_company = about_company_org.lower()
-    skip_checking = False
-    for word in about_company_good_words:
-        if word.lower() in about_company:
-            print_lg(f'Found the word "{word}". So, skipped checking for blacklist words.')
-            skip_checking = True
-            break
-    if not skip_checking:
-        for word in about_company_bad_words: 
-            if word.lower() in about_company: 
-                rejected_jobs.add(job_id)
-                blacklisted_companies.add(company)
-                raise ValueError(f'\n"{about_company_org}"\n\nContains "{word}".')
-    buffer(click_gap)
-    if jobs_top_card:
-        try: scroll_to_view(driver, jobs_top_card)
-        except: pass
-    return rejected_jobs, blacklisted_companies, jobs_top_card
-
-
-
-# Function to extract years of experience required from About Job
-def extract_years_of_experience(text: str) -> int:
-    # Extract all patterns like '10+ years', '5 years', '3-5 years', etc.
-    matches = re.findall(re_experience, text)
-    if len(matches) == 0: 
-        print_lg(f'\n{text}\n\nCouldn\'t find experience requirement in About the Job!')
-        return 0
-    return max([int(match) for match in matches if int(match) <= 12])
-
-
-
-def get_job_description(
-) -> tuple[
-    str | Literal['Unknown'],
-    int | Literal['Unknown'],
-    bool,
-    str | None,
-    str | None
-    ]:
-    '''
-    # Job Description
-    Function to extract job description from About the Job.
-    ### Returns:
-    - `jobDescription: str | 'Unknown'`
-    - `experience_required: int | 'Unknown'`
-    - `skip: bool`
-    - `skipReason: str | None`
-    - `skipMessage: str | None`
-    '''
-    try:
-        ##> ------ Dheeraj Deshwal : dheeraj9811 Email:dheeraj20194@iiitd.ac.in/dheerajdeshwal9811@gmail.com - Feature ------
-        jobDescription = "Unknown"
-        ##<
-        experience_required = "Unknown"
-        found_masters = 0
-        jobDescription = find_by_class(driver, "jobs-box__html-content").text
-        jobDescriptionLow = jobDescription.lower()
-        skip = False
-        skipReason = None
-        skipMessage = None
-        for word in bad_words:
-            if word.lower() in jobDescriptionLow:
-                skipMessage = f'\n{jobDescription}\n\nContains bad word "{word}". Skipping this job!\n'
-                skipReason = "Found a Bad Word in About Job"
-                skip = True
-                break
-        if not skip and security_clearance == False and ('polygraph' in jobDescriptionLow or 'clearance' in jobDescriptionLow or 'secret' in jobDescriptionLow):
-            skipMessage = f'\n{jobDescription}\n\nFound "Clearance" or "Polygraph". Skipping this job!\n'
-            skipReason = "Asking for Security clearance"
-            skip = True
-        if not skip:
-            if did_masters and 'master' in jobDescriptionLow:
-                print_lg(f'Found the word "master" in \n{jobDescription}')
-                found_masters = 2
-            experience_required = extract_years_of_experience(jobDescription)
-            if current_experience > -1 and experience_required > current_experience + found_masters:
-                skipMessage = f'\n{jobDescription}\n\nExperience required {experience_required} > Current Experience {current_experience + found_masters}. Skipping this job!\n'
-                skipReason = "Required experience is high"
-                skip = True
-    except Exception as e:
-        if jobDescription == "Unknown":    print_lg("Unable to extract job description!")
-        else:
-            experience_required = "Error in extraction"
-            print_lg("Unable to extract years of experience required!")
-            # print_lg(e)
-    finally:
-        return jobDescription, experience_required, skip, skipReason, skipMessage
-        
-
-
-# Function to upload resume
-def upload_resume(modal: WebElement, resume: str) -> tuple[bool, str]:
-    try:
-        modal.find_element(By.NAME, "file").send_keys(os.path.abspath(resume))
-        return True, os.path.basename(default_resume_path)
-    except: return False, "Previous resume"
-
-# Function to answer common questions for Easy Apply
-def answer_common_questions(label: str, answer: str) -> str:
-    if 'sponsorship' in label or 'visa' in label: answer = require_visa
-    return answer
-
-
-# Function to answer the questions for Easy Apply
-def answer_questions(modal: WebElement, questions_list: set, work_location: str, job_description: str | None = None ) -> set:
-    # Get all questions from the page
-     
-    all_questions = modal.find_elements(By.XPATH, ".//div[@data-test-form-element]")
-    # all_questions = modal.find_elements(By.CLASS_NAME, "jobs-easy-apply-form-element")
-    # all_list_questions = modal.find_elements(By.XPATH, ".//div[@data-test-text-entity-list-form-component]")
-    # all_single_line_questions = modal.find_elements(By.XPATH, ".//div[@data-test-single-line-text-form-component]")
-    # all_questions = all_questions + all_list_questions + all_single_line_questions
-
-    for Question in all_questions:
-        # Check if it's a select Question
-        select = try_xp(Question, ".//select", False)
-        if select:
-            label_org = "Unknown"
-            try:
-                label = Question.find_element(By.TAG_NAME, "label")
-                label_org = label.find_element(By.TAG_NAME, "span").text
-            except: pass
-            answer = 'Yes'
-            label = label_org.lower()
-            select = Select(select)
-            selected_option = select.first_selected_option.text
-            optionsText = []
-            options = '"List of phone country codes"'
-            if label != "phone country code":
-                optionsText = [option.text for option in select.options]
-                options = "".join([f' "{option}",' for option in optionsText])
-            prev_answer = selected_option
-            if overwrite_previous_answers or selected_option == "Select an option":
-                ##> ------ WINDY_WINDWARD Email:karthik.sarode23@gmail.com - Added fuzzy logic to answer location based questions ------
-                if 'email' in label or 'phone' in label: 
-                    answer = prev_answer
-                elif 'gender' in label or 'sex' in label: 
-                    answer = gender
-                elif 'disability' in label: 
-                    answer = disability_status
-                elif 'proficiency' in label: 
-                    answer = 'Professional'
-                # Add location handling
-                elif any(loc_word in label for loc_word in ['location', 'city', 'state', 'country']):
-                    if 'country' in label:
-                        answer = country 
-                    elif 'state' in label:
-                        answer = state
-                    elif 'city' in label:
-                        answer = current_city if current_city else work_location
-                    else:
-                        answer = work_location
-                else: 
-                    answer = answer_common_questions(label,answer)
-                try: 
-                    select.select_by_visible_text(answer)
-                except NoSuchElementException as e:
-                    # Define similar phrases for common answers
-                    possible_answer_phrases = []
-                    if answer == 'Decline':
-                        possible_answer_phrases = ["Decline", "not wish", "don't wish", "Prefer not", "not want"]
-                    elif 'yes' in answer.lower():
-                        possible_answer_phrases = ["Yes", "Agree", "I do", "I have"]
-                    elif 'no' in answer.lower():
-                        possible_answer_phrases = ["No", "Disagree", "I don't", "I do not"]
-                    else:
-                        # Try partial matching for any answer
-                        possible_answer_phrases = [answer]
-                        # Add lowercase and uppercase variants
-                        possible_answer_phrases.append(answer.lower())
-                        possible_answer_phrases.append(answer.upper())
-                        # Try without special characters
-                        possible_answer_phrases.append(''.join(c for c in answer if c.isalnum()))
-                    ##<
-                    foundOption = False
-                    for phrase in possible_answer_phrases:
-                        for option in optionsText:
-                            # Check if phrase is in option or option is in phrase (bidirectional matching)
-                            if phrase.lower() in option.lower() or option.lower() in phrase.lower():
-                                select.select_by_visible_text(option)
-                                answer = option
-                                foundOption = True
-                                break
-                    if not foundOption:
-                        #TODO: Use AI to answer the question need to be implemented logic to extract the options for the question
-                        print_lg(f'Failed to find an option with text "{answer}" for question labelled "{label_org}", answering randomly!')
-                        select.select_by_index(randint(1, len(select.options)-1))
-                        answer = select.first_selected_option.text
-                        randomly_answered_questions.add((f'{label_org} [ {options} ]',"select"))
-            questions_list.add((f'{label_org} [ {options} ]', answer, "select", prev_answer))
-            continue
-        
-        # Check if it's a radio Question
-        radio = try_xp(Question, './/fieldset[@data-test-form-builder-radio-button-form-component="true"]', False)
-        if radio:
-            prev_answer = None
-            label = try_xp(radio, './/span[@data-test-form-builder-radio-button-form-component__title]', False)
-            try: label = find_by_class(label, "visually-hidden", 2.0)
-            except: pass
-            label_org = label.text if label else "Unknown"
-            answer = 'Yes'
-            label = label_org.lower()
-
-            label_org += ' [ '
-            options = radio.find_elements(By.TAG_NAME, 'input')
-            options_labels = []
-            
-            for option in options:
-                id = option.get_attribute("id")
-                option_label = try_xp(radio, f'.//label[@for="{id}"]', False)
-                options_labels.append( f'"{option_label.text if option_label else "Unknown"}"<{option.get_attribute("value")}>' ) # Saving option as "label <value>"
-                if option.is_selected(): prev_answer = options_labels[-1]
-                label_org += f' {options_labels[-1]},'
-
-            if overwrite_previous_answers or prev_answer is None:
-                if 'citizenship' in label or 'employment eligibility' in label: answer = us_citizenship
-                elif 'veteran' in label or 'protected' in label: answer = veteran_status
-                elif 'disability' in label or 'handicapped' in label: 
-                    answer = disability_status
-                else: answer = answer_common_questions(label,answer)
-                foundOption = try_xp(radio, f".//label[normalize-space()='{answer}']", False)
-                if foundOption: 
-                    actions.move_to_element(foundOption).click().perform()
-                else:    
-                    possible_answer_phrases = ["Decline", "not wish", "don't wish", "Prefer not", "not want"] if answer == 'Decline' else [answer]
-                    ele = options[0]
-                    answer = options_labels[0]
-                    for phrase in possible_answer_phrases:
-                        for i, option_label in enumerate(options_labels):
-                            if phrase in option_label:
-                                foundOption = options[i]
-                                ele = foundOption
-                                answer = f'Decline ({option_label})' if len(possible_answer_phrases) > 1 else option_label
-                                break
-                        if foundOption: break
-                    # if answer == 'Decline':
-                    #     answer = options_labels[0]
-                    #     for phrase in ["Prefer not", "not want", "not wish"]:
-                    #         foundOption = try_xp(radio, f".//label[normalize-space()='{phrase}']", False)
-                    #         if foundOption:
-                    #             answer = f'Decline ({phrase})'
-                    #             ele = foundOption
-                    #             break
-                    actions.move_to_element(ele).click().perform()
-                    if not foundOption: randomly_answered_questions.add((f'{label_org} ]',"radio"))
-            else: answer = prev_answer
-            questions_list.add((label_org+" ]", answer, "radio", prev_answer))
-            continue
-        
-        # Check if it's a text question
-          # Check if it's a text question
-        text = try_xp(Question, ".//input[@type='text']", False)
-        if text: 
-            do_actions = False
-            label = try_xp(Question, ".//label[@for]", False)
-            try: label = label.find_element(By.CLASS_NAME,'visually-hidden')
-            except: pass
-            label_org = label.text if label else "Unknown"
-            answer = "" 
-            label = label_org.lower()
-
-            prev_answer = text.get_attribute("value")
-            if not prev_answer or overwrite_previous_answers:
-
-                # all your existing text logic here …
-                # (experience, phone, salary, linkedin, etc)
-
-                # After all rules + AI logic, ensure answer is filled
-                if not answer or str(answer).strip() == "":
-                    pyautogui.alert(
-                        f"Could not auto-fill the question:\n\n'{label_org}'\n\n"
-                        "Please type the answer manually in LinkedIn.\n\n"
-                        "Click OK after you finish typing.",
-                        "Manual Input Required"
-                    )
-
-                    # Wait until user manually types
-                    while True:
-                        current_val = text.get_attribute("value")
-                        if current_val and current_val.strip() != "":
-                            answer = current_val
-                            break
-                        sleep(0.5)
-
-                text.clear()
-                text.send_keys(answer)
-                if do_actions:
-                    sleep(2)
-                    actions.send_keys(Keys.ARROW_DOWN)
-                    actions.send_keys(Keys.ENTER).perform()
-
-            questions_list.add((label, text.get_attribute("value"), "text", prev_answer))
-            continue
-
-        # Check if it's a textarea question
-        text_area = try_xp(Question, ".//textarea", False)
-        if text_area:
-            label = try_xp(Question, ".//label[@for]", False)
-            label_org = label.text if label else "Unknown"
-            label = label_org.lower()
-            answer = ""
-            prev_answer = text_area.get_attribute("value")
-            if not prev_answer or overwrite_previous_answers:
-                if 'summary' in label: answer = linkedin_summary
-                elif 'cover' in label: answer = cover_letter
-                if answer == "":
-                ##> ------ Yang Li : MARKYangL - Feature ------
-                    if use_AI and aiClient:
-                        try:
-                            if ai_provider.lower() == "openai":
-                                answer = ai_answer_question(aiClient, label_org, question_type="textarea", job_description=job_description, user_information_all=user_information_all)
-                            elif ai_provider.lower() == "deepseek":
-                                answer = deepseek_answer_question(aiClient, label_org, options=None, question_type="textarea", job_description=job_description, about_company=None, user_information_all=user_information_all)
-                            elif ai_provider.lower() == "gemini":
-                                answer = gemini_answer_question(aiClient, label_org, options=None, question_type="textarea", job_description=job_description, about_company=None, user_information_all=user_information_all)
-                            else:
-                                randomly_answered_questions.add((label_org, "textarea"))
-                                answer = ""
-                            if answer and isinstance(answer, str) and len(answer) > 0:
-                                print_lg(f'AI Answered received for question "{label_org}" \nhere is answer: "{answer}"')
-                            else:
-                                randomly_answered_questions.add((label_org, "textarea"))
-                                answer = ""
-                        except Exception as e:
-                            print_lg("Failed to get AI answer!", e)
-                            randomly_answered_questions.add((label_org, "textarea"))
-                            answer = ""
-                    else:
-                        randomly_answered_questions.add((label_org, "textarea"))
-            text_area.clear()
-            text_area.send_keys(answer)
-            if do_actions:
-                    sleep(2)
-                    actions.send_keys(Keys.ARROW_DOWN)
-                    actions.send_keys(Keys.ENTER).perform()
-            questions_list.add((label, text_area.get_attribute("value"), "textarea", prev_answer))
-            ##<
-            continue
-
-        # Check if it's a checkbox question
-        checkbox = try_xp(Question, ".//input[@type='checkbox']", False)
-        if checkbox:
-            label = try_xp(Question, ".//span[@class='visually-hidden']", False)
-            label_org = label.text if label else "Unknown"
-            label = label_org.lower()
-            answer = try_xp(Question, ".//label[@for]", False)  # Sometimes multiple checkboxes are given for 1 question, Not accounted for that yet
-            answer = answer.text if answer else "Unknown"
-            prev_answer = checkbox.is_selected()
-            checked = prev_answer
-            if not prev_answer:
-                try:
-                    actions.move_to_element(checkbox).click().perform()
-                    checked = True
-                except Exception as e: 
-                    print_lg("Checkbox click failed!", e)
-                    pass
-            questions_list.add((f'{label} ([X] {answer})', checked, "checkbox", prev_answer))
-            continue
-
-
-    # Select todays date
-    try_xp(driver, "//button[contains(@aria-label, 'This is today')]")
-
-    # Collect important skills
-    # if 'do you have' in label and 'experience' in label and ' in ' in label -> Get word (skill) after ' in ' from label
-    # if 'how many years of experience do you have in ' in label -> Get word (skill) after ' in '
-
-    return questions_list
+# Other filtering functions also moved to modules/filtering.py
 
 
 
@@ -1236,8 +868,13 @@ def failed_job(job_id: str, title: str, company: str, job_link: str, resume: str
             writer.writerows(existing_rows)
         
         print_lg(f"❌ Logged failure to '{candidate_name}.csv' for job: {title} at {company}")
+        
+        # Queue failure for bulk sync to website
+        csv_line = f"{new_row['Timestamp']},{job_id},{title},{company},Attempted: {application_link},Result: Failed: {reason}"
+        pending_activity_logs.append(csv_line)
 
     except Exception as e:
+
         print_lg("Failed to update the new candidate CSV file for failed job!", e)
 
 
@@ -1325,7 +962,7 @@ def discard_job() -> None:
 
 # Function to apply to jobs
 def apply_to_jobs(search_terms: list[str]) -> None:
-    applied_jobs = get_applied_job_ids()
+    applied_jobs = get_applied_job_ids(file_name)
     rejected_jobs = set()
     blacklisted_companies = set()
     global current_city, failed_count, skip_count, easy_applied_count, external_jobs_count, tabs_count, pause_before_submit, pause_at_failed_question, useNewResume
@@ -1356,14 +993,14 @@ def apply_to_jobs(search_terms: list[str]) -> None:
             print_lg("\n________________________________________________________________________________________________________________________\n")
             print_lg(f'\n>>>> Now searching for "{searchTerm}" <<<<\n\n')
 
-            apply_filters() # Still needed for complex filters like 'Remote' specifically if URL param isn't perfect
+            apply_filters(driver, wait, actions, cfg) # Still needed for complex filters like 'Remote' specifically if URL param isn't perfect
 
             current_count = 0
             while current_count < switch_number:
                 try:
                     wait.until(EC.presence_of_all_elements_located((By.XPATH, "//li[@data-occludable-job-id]")))
 
-                    pagination_element, current_page = get_page_info()
+                    pagination_element, current_page = get_page_info(driver)
 
                     # Find all job listings in current page
                     buffer(3)
@@ -1375,7 +1012,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                         if current_count >= switch_number: break
                         print_lg("\n-@-\n")
 
-                        job_id,title,company,work_location,work_style,skip = get_job_main_details(job, blacklisted_companies, rejected_jobs)
+                        job_id,title,company,work_location,work_style,skip = get_job_main_details(driver, job, blacklisted_companies, rejected_jobs, click_gap)
                         
                         if skip: continue
                         # Redundant fail safe check for applied jobs!
@@ -1401,7 +1038,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
 
                         jobs_top_card = None
                         try:
-                            rejected_jobs, blacklisted_companies, jobs_top_card = check_blacklist(rejected_jobs,job_id,company,blacklisted_companies)
+                            rejected_jobs, blacklisted_companies, jobs_top_card = check_blacklist(driver, rejected_jobs,job_id,company,blacklisted_companies, about_company_good_words, about_company_bad_words, click_gap)
                         except ValueError as e:
                             print_lg(e, 'Skipping this job!\n')
                             failed_job(job_id, title, company, job_link, resume, date_listed, "Found Blacklisted words in About Company", e, "Skipped", screenshot_name)
@@ -1439,7 +1076,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                             date_listed = "Unknown"
 
 
-                        description, experience_required, skip, reason, message = get_job_description()
+                        description, experience_required, skip, reason, message = get_job_description(driver, cfg)
                         if skip:
                             print_lg(message)
                             failed_job(job_id, title, company, job_link, resume, date_listed, reason, message, "Skipped", screenshot_name)
@@ -1491,7 +1128,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                                             screenshot_name = screenshot(driver, job_id, "Failed at questions")
                                             errored = "stuck"
                                             raise Exception("Seems like stuck in a continuous loop of next, probably because of new questions.")
-                                        questions_list = answer_questions(modal, questions_list, work_location, job_description=description)
+                                        questions_list = answer_questions(driver, actions, modal, questions_list, work_location, job_description=description, config_vars=cfg, ai_client=aiClient, randomly_answered_questions=randomly_answered_questions)
                                         if useNewResume and not uploaded: uploaded, resume = upload_resume(modal, default_resume_path)
                                         try: 
                                             next_button = modal.find_element(By.XPATH, './/span[contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "review")]') 
@@ -1556,13 +1193,9 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                             csv_line = f"{timestamp},{job_id},{title},{company},Easy Apply,Success"
                             
-                            # Send cumulative total to website
-                            send_activity_log(
-                                job_id,
-                                datetime.now(),
-                                easy_applied_count,
-                                csv_line
-                            )
+                            # Queue for bulk sync instead of immediate send
+                            pending_activity_logs.append(csv_line)
+
 
                         else:   
                             external_jobs_count += 1
@@ -1572,13 +1205,9 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                             csv_line = f"{timestamp},{job_id},{title},{company},External,Success"
 
-                            # Send cumulative total to website API for External applications
-                            send_activity_log(
-                                job_id,
-                                datetime.now(),
-                                external_jobs_count,
-                                csv_line
-                            )
+                            # Queue for bulk sync instead of immediate send
+                            pending_activity_logs.append(csv_line)
+
                         applied_jobs.add(job_id)
 
 
@@ -1611,6 +1240,13 @@ def apply_to_jobs(search_terms: list[str]) -> None:
             print_lg(f"Failed to process keyword '{searchTerm}'! Error: {e}")
             critical_error_log("In Applier Search Loop", e)
             continue # Move to next searchTerm
+        finally:
+            # Sync logs after each search term
+            try:
+                sync_bulk_activity_logs()
+            except Exception as e:
+                print_lg(f"Failed periodic sync for {searchTerm}: {e}")
+
 
         
 def run(total_runs: int) -> int:
@@ -1712,7 +1348,7 @@ def main() -> None:
         total_runs = run(total_runs)
         while(run_non_stop):
             if cycle_date_posted:
-                date_options = ["Any time", "Past month", "Past week", "Past 24 hours"]
+                date_options = ["Past 24 hours", "Past week", "Past month", "Any time"]
                 global date_posted
                 date_posted = date_options[date_options.index(date_posted)+1 if date_options.index(date_posted)+1 > len(date_options) else -1] if stop_date_cycle_at_24hr else date_options[0 if date_options.index(date_posted)+1 >= len(date_options) else date_options.index(date_posted)+1]
             if alternate_sortby:
@@ -1731,6 +1367,12 @@ def main() -> None:
         critical_error_log("In Applier Main", e)
         pyautogui.alert(e,alert_title)
     finally:
+        # Final Bulk Sync before exit
+        try:
+            sync_bulk_activity_logs()
+        except Exception as e:
+            print_lg(f"Failed final sync: {e}")
+
         print_lg("\n\nTotal runs:                     {}".format(total_runs))
         print_lg("Jobs Easy Applied:              {}".format(easy_applied_count))
         print_lg("External job links collected:   {}".format(external_jobs_count))

@@ -38,6 +38,7 @@ Click on above image to watch the demo or use this link https://youtu.be/gMbB1fW
   - OpenAI & Google Generative AI (for AI features)
   - Flask & Flask-CORS (for the web UI)
   - PyYAML (for configuration management)
+  - python-dotenv (for environment variables)
   - And other dependencies
 
 3. **Google Chrome** - Download and install the latest version of [Google Chrome](https://www.google.com/chrome) in its default location.
@@ -50,7 +51,13 @@ Click on above image to watch the demo or use this link https://youtu.be/gMbB1fW
   <br> <br>
   If you are using Windows, click on `windows-setup.bat` available in the `/setup` folder, this will install the latest chromedriver automatically.
 
-6. **Support** - If you have questions or need help setting it up or to talk in general, join the Discord server: https://discord.gg/fFp7uUzWCY
+6. **Environment Variables** - Copy the `.env.example` file to `.env` and configure your settings:
+  ```bash
+  copy .env.example .env
+  ```
+  Edit `.env` and add your API tokens and credentials. See the `.env.example` file for available options.
+
+7. **Support** - If you have questions or need help setting it up or to talk in general, join the Discord server: https://discord.gg/fFp7uUzWCY
 
 [back to index](#-content)
 
@@ -72,7 +79,7 @@ The bot now uses a modern YAML-based configuration system for better organizatio
    - **Questions**: Default answers for common application questions
    - **Settings**: Bot behavior, stealth mode, click intervals, etc.
 
-3. **Add Your Resume** - Place your default resume in the location specified in your YAML config (default: `all resumes/default/resume.pdf`). If not provided, the bot will use your previous LinkedIn resume or generate a custom one if AI is enabled.
+3. **Add Your Resume** - Place your default resume in `modules/resumes/` folder (e.g., `modules/resumes/your_name.pdf`). Update the `resume_path` in your YAML config to point to this file. If not provided, the bot will use your previous LinkedIn resume or generate a custom one if AI is enabled.
 
 4. **Run the Bot** - Execute `python runAiBot.py`. The bot will prompt you to select which candidate profile to use if multiple YAML files exist.
 

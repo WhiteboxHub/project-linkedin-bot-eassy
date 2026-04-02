@@ -37,6 +37,7 @@ env/
 # Project Specific - User Data
 all excels/
 all resumes/
+modules/resumes/*.pdf
 output/
 logs/
 screenshots/
@@ -45,7 +46,10 @@ screenshots/
 config/secrets.py
 config/personals.py
 config/candidates/*.yaml
+config/candidates/!.gitkeep
+!config/candidates/.gitkeep
 apikeys.py
+.env
 *.env
 
 # Project Specific - Legacy/Deprecated
