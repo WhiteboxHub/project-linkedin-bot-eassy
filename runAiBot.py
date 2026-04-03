@@ -342,7 +342,7 @@ def get_job_type_id():
     return 1
 
 def get_candidate_id():
-    """Dynamically find a Candidate ID to use for logging using name and email."""
+    """Dynamically find a Candidate ID to use for logging using name, email, and phone."""
     global _CACHED_CANDIDATE_ID
     if _CACHED_CANDIDATE_ID is not None:
         return _CACHED_CANDIDATE_ID
@@ -364,40 +364,53 @@ def get_candidate_id():
              response = requests.get(url, headers=headers, timeout=10)
 
         if response.status_code == 200:
-
             data = response.json()
             candidates = data if isinstance(data, list) else data.get("data", [])
             
-            # Search by full_name only
-            
             target_full_name = full_name.strip().lower()
+            target_email = email.strip().lower()
+            # Normalize phone: extract only digits
+            target_phone_digits = re.sub(r'\D', '', phone_number)
             
-            print_lg(f"🔍 Searching for Candidate by full_name: {target_full_name}")
+            print_lg(f"🔍 Searching for Candidate: '{target_full_name}' | Email: '{target_email}' | Phone Digits: '{target_phone_digits}'")
 
-            # Try matching by full_name
+            # 1. Try matching by EXACT full_name
             for cand in candidates:
                 c_full_name = str(cand.get('full_name', '')).strip().lower()
-                
                 if c_full_name == target_full_name:
                     _CACHED_CANDIDATE_ID = cand["id"]
                     print_lg(f"✅ Full Name Match found! Using Candidate: {cand.get('full_name')} (ID: {_CACHED_CANDIDATE_ID})")
                     return _CACHED_CANDIDATE_ID
             
-            # Try partial match if exact match not found
+            # 2. Try matching by EXACT email
+            for cand in candidates:
+                c_email = str(cand.get('email', '')).strip().lower()
+                if c_email and c_email == target_email:
+                    _CACHED_CANDIDATE_ID = cand["id"]
+                    print_lg(f"✅ Email Match found! Using Candidate: {cand.get('full_name')} (ID: {_CACHED_CANDIDATE_ID})")
+                    return _CACHED_CANDIDATE_ID
+
+            # 3. Try matching by ORMALIZED phone number
+            if target_phone_digits:
+                for cand in candidates:
+                    # Check multiple possible phone fields
+                    c_phone = str(cand.get('phone', '') or cand.get('phone_number', '') or cand.get('mobile', '')).strip()
+                    c_phone_digits = re.sub(r'\D', '', c_phone)
+                    if c_phone_digits and c_phone_digits == target_phone_digits:
+                        _CACHED_CANDIDATE_ID = cand["id"]
+                        print_lg(f"✅ Phone Match found! Using Candidate: {cand.get('full_name')} (ID: {_CACHED_CANDIDATE_ID})")
+                        return _CACHED_CANDIDATE_ID
+
+            # 4. Try partial name match as last resort
             for cand in candidates:
                 c_full_name = str(cand.get('full_name', '')).strip().lower()
-                
-                if target_full_name in c_full_name or c_full_name in target_full_name:
+                if target_full_name and c_full_name and (target_full_name in c_full_name or c_full_name in target_full_name):
                     _CACHED_CANDIDATE_ID = cand["id"]
                     print_lg(f"✅ Partial Name Match found! Using Candidate: {cand.get('full_name')} (ID: {_CACHED_CANDIDATE_ID})")
                     return _CACHED_CANDIDATE_ID
 
-            # 3. Fallback: Warn and use first one if absolutely no match, or return None to fail sync
-            print_lg(f"⚠️ Warning: No match found for '{first_name} {last_name}'.")
+            print_lg(f"⚠️ Warning: No match found for '{target_full_name}' by Name, Email, or Phone.")
             if candidates:
-                # _CACHED_CANDIDATE_ID = candidates[0]["id"]
-                # print_lg(f"⚠️ Fallback to first candidate: {candidates[0].get('first_name')} (ID: {_CACHED_CANDIDATE_ID})")
-                # return _CACHED_CANDIDATE_ID
                 print_lg("❌ Sync will be skipped to avoid logging under the wrong user.")
                 return None
                 
