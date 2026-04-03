@@ -342,7 +342,7 @@ def get_job_type_id():
     return 1
 
 def get_candidate_id():
-    """Dynamically find a Candidate ID to use for logging using name, email, and phone."""
+    """Dynamically find a Candidate ID to use for logging using name, email, and phone, with pagination support."""
     global _CACHED_CANDIDATE_ID
     if _CACHED_CANDIDATE_ID is not None:
         return _CACHED_CANDIDATE_ID
@@ -350,69 +350,100 @@ def get_candidate_id():
     if not API_TOKEN: return None
 
     try:
-        url = f"{WEBSITE_URL.rstrip('/')}/candidates"
+        base_url = f"{WEBSITE_URL.rstrip('/')}/candidates"
         headers = {
             "Authorization": f"Bearer {API_TOKEN}",
             "Content-Type": "application/json"
         }
-        response = requests.get(url, headers=headers, timeout=10)
         
-        if response.status_code == 401:
-             print_lg("Token rejected (401) in get_candidate_id. Refreshing...")
-             get_api_token(force_refresh=True)
-             headers["Authorization"] = f"Bearer {API_TOKEN}"
-             response = requests.get(url, headers=headers, timeout=10)
+        target_full_name = full_name.strip().lower()
+        target_email = email.strip().lower()
+        target_phone_digits = re.sub(r'\D', '', phone_number)
 
-        if response.status_code == 200:
-            data = response.json()
-            candidates = data if isinstance(data, list) else data.get("data", [])
-            
-            target_full_name = full_name.strip().lower()
-            target_email = email.strip().lower()
-            # Normalize phone: extract only digits
-            target_phone_digits = re.sub(r'\D', '', phone_number)
-            
-            print_lg(f"🔍 Searching for Candidate: '{target_full_name}' | Email: '{target_email}' | Phone Digits: '{target_phone_digits}'")
+        # 1. Try DIRECT SEARCH by email first (high efficiency)
+        try:
+            search_url = f"{base_url}?search={target_email}"
+            search_resp = requests.get(search_url, headers=headers, timeout=10)
+            if search_resp.status_code == 200:
+                s_data = search_resp.json()
+                s_candidates = s_data if isinstance(s_data, list) else s_data.get("data", [])
+                for cand in s_candidates:
+                    if str(cand.get('email', '')).strip().lower() == target_email:
+                        _CACHED_CANDIDATE_ID = cand["id"]
+                        print_lg(f"✅ Found Candidate via Direct Search! (ID: {_CACHED_CANDIDATE_ID})")
+                        return _CACHED_CANDIDATE_ID
+        except: pass
 
-            # 1. Try matching by EXACT full_name
-            for cand in candidates:
-                c_full_name = str(cand.get('full_name', '')).strip().lower()
-                if c_full_name == target_full_name:
-                    _CACHED_CANDIDATE_ID = cand["id"]
-                    print_lg(f"✅ Full Name Match found! Using Candidate: {cand.get('full_name')} (ID: {_CACHED_CANDIDATE_ID})")
-                    return _CACHED_CANDIDATE_ID
+        # 2. PAGINATED SEARCH (Tiered Matching)
+        page = 1
+        max_pages = 10 # Search up to 1000 candidates
+        all_candidates_checked = 0
+        
+        while page <= max_pages:
+            url = f"{base_url}?page={page}&limit=100"
+            response = requests.get(url, headers=headers, timeout=10)
             
-            # 2. Try matching by EXACT email
+            if response.status_code == 401:
+                 get_api_token(force_refresh=True)
+                 headers["Authorization"] = f"Bearer {API_TOKEN}"
+                 response = requests.get(url, headers=headers, timeout=10)
+
+            if response.status_code != 200:
+                break
+
+            raw_data = response.json()
+            candidates = raw_data if isinstance(raw_data, list) else raw_data.get("data", [])
+            
+            if not candidates:
+                break
+                
+            all_candidates_checked += len(candidates)
+            print_lg(f"🔍 Searching page {page} ({len(candidates)} candidates)...")
+
+            # Tiered matching within this page
+            # a. Exact Email
             for cand in candidates:
-                c_email = str(cand.get('email', '')).strip().lower()
+                c_email = str(cand.get('email', '') or '').strip().lower()
                 if c_email and c_email == target_email:
                     _CACHED_CANDIDATE_ID = cand["id"]
                     print_lg(f"✅ Email Match found! Using Candidate: {cand.get('full_name')} (ID: {_CACHED_CANDIDATE_ID})")
                     return _CACHED_CANDIDATE_ID
 
-            # 3. Try matching by ORMALIZED phone number
+            # b. Exact Phone
             if target_phone_digits:
                 for cand in candidates:
-                    # Check multiple possible phone fields
-                    c_phone = str(cand.get('phone', '') or cand.get('phone_number', '') or cand.get('mobile', '')).strip()
+                    c_phone = str(cand.get('phone', '') or cand.get('phone_number', '') or cand.get('mobile', '') or '').strip()
                     c_phone_digits = re.sub(r'\D', '', c_phone)
                     if c_phone_digits and c_phone_digits == target_phone_digits:
                         _CACHED_CANDIDATE_ID = cand["id"]
                         print_lg(f"✅ Phone Match found! Using Candidate: {cand.get('full_name')} (ID: {_CACHED_CANDIDATE_ID})")
                         return _CACHED_CANDIDATE_ID
 
-            # 4. Try partial name match as last resort
+            # c. Exact Name
             for cand in candidates:
-                c_full_name = str(cand.get('full_name', '')).strip().lower()
-                if target_full_name and c_full_name and (target_full_name in c_full_name or c_full_name in target_full_name):
+                c_full_name = str(cand.get('full_name', '') or '').strip().lower()
+                if c_full_name == target_full_name:
                     _CACHED_CANDIDATE_ID = cand["id"]
-                    print_lg(f"✅ Partial Name Match found! Using Candidate: {cand.get('full_name')} (ID: {_CACHED_CANDIDATE_ID})")
+                    print_lg(f"✅ Full Name Match found! Using Candidate: {cand.get('full_name')} (ID: {_CACHED_CANDIDATE_ID})")
                     return _CACHED_CANDIDATE_ID
 
-            print_lg(f"⚠️ Warning: No match found for '{target_full_name}' by Name, Email, or Phone.")
-            if candidates:
-                print_lg("❌ Sync will be skipped to avoid logging under the wrong user.")
-                return None
+            # d. Partial Name (Fuzzy)
+            for cand in candidates:
+                c_full_name = str(cand.get('full_name', '') or '').strip().lower()
+                # Check for Sujata vs Sujatha
+                if target_full_name and c_full_name:
+                    if target_full_name in c_full_name or c_full_name in target_full_name:
+                        _CACHED_CANDIDATE_ID = cand["id"]
+                        print_lg(f"✅ Partial Name Match found! Using Candidate: {cand.get('full_name')} (ID: {_CACHED_CANDIDATE_ID})")
+                        return _CACHED_CANDIDATE_ID
+            
+            # If we found less than 100, we're at the end
+            if len(candidates) < 100:
+                break
+            page += 1
+
+        print_lg(f"⚠️ Warning: No match found for '{target_full_name}' among {all_candidates_checked} profiles.")
+        return None
                 
     except Exception as e:
         print_lg(f"Could not fetch candidates: {e}")
