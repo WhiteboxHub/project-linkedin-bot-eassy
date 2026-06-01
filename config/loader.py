@@ -71,7 +71,7 @@ def load_candidate(candidate_name=None):
         'config_path': full_path
     }
     
-    print(f"\n✅ Loaded Candidate Profile: {candidate_file}")
+    print(f"\n[SUCCESS] Loaded Candidate Profile: {candidate_file}")
     return cfg
 
 def get_candidate_name(cfg):
