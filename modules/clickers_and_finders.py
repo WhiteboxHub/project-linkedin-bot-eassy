@@ -232,7 +232,9 @@ def text_input(actions: ActionChains, textInputEle: WebElement | bool, value: st
     if textInputEle:
         sleep(1)
         # actions.key_down(Keys.CONTROL).send_keys("a").key_up(Keys.CONTROL).perform()
-        textInputEle.clear()
+        textInputEle.send_keys(Keys.CONTROL + "a")
+        textInputEle.send_keys(Keys.BACKSPACE)
+        sleep(0.5)
         textInputEle.send_keys(value.strip())
         sleep(2)
         actions.send_keys(Keys.ENTER).perform()
