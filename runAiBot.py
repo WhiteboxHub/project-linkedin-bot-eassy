@@ -2882,18 +2882,6 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                                 except Exception as e:
                                     print_lg("Failed to extract skills:", e)
                                     skills = "Error extracting skills"
-                                ##<
-
-                        uploaded = False
-                        # Case 1: Easy Apply Button
-                        if try_xp(driver, ".//button[contains(@class,'jobs-apply-button') and contains(@class, 'artdeco-button--3') and (contains(@aria-label, 'Easy') or .//li-icon[contains(@type, 'linkedin') or contains(@type, 'in-bug')] or .//svg[contains(@data-test-icon, 'linkedin') or contains(@data-test-icon, 'in-bug')])]"):
-                            try: 
-                                try:
-                                    errored = ""
-                                    modal = find_by_class(driver, "jobs-easy-apply-modal")
-                                    wait_span_click(modal, "Next", 1)
-                                    # if description != "Unknown":
-                                    #     resume = create_custom_resume(description)
                             uploaded = False
                             # Find Easy Apply button STRICTLY within job details pane / top card (Old and New UI)
                             easy_apply_btn = None
